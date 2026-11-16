@@ -9,7 +9,7 @@
    "lat": 48.8584,
    "lon": 2.2945,
    "structureHeightM": 330,
-   "groundElevationM": 95
+   "groundElevationM": 43
   },
   {
    "id": "big-ben",
@@ -20,7 +20,7 @@
    "lat": 51.5007,
    "lon": -0.1246,
    "structureHeightM": 96,
-   "groundElevationM": 27
+   "groundElevationM": 13
   },
   {
    "id": "stonehenge",
@@ -31,7 +31,7 @@
    "lat": 51.1789,
    "lon": -1.8262,
    "structureHeightM": 7,
-   "groundElevationM": 94
+   "groundElevationM": 102
   },
   {
    "id": "colosseum",
@@ -42,7 +42,7 @@
    "lat": 41.8902,
    "lon": 12.4922,
    "structureHeightM": 48,
-   "groundElevationM": 19
+   "groundElevationM": 38
   },
   {
    "id": "sagrada-familia",
@@ -53,7 +53,7 @@
    "lat": 41.4036,
    "lon": 2.1744,
    "structureHeightM": 172,
-   "groundElevationM": 31
+   "groundElevationM": 47
   },
   {
    "id": "acropolis",
@@ -64,7 +64,7 @@
    "lat": 37.9715,
    "lon": 23.7257,
    "structureHeightM": 14,
-   "groundElevationM": 153
+   "groundElevationM": 77
   },
   {
    "id": "neuschwanstein",
@@ -75,7 +75,7 @@
    "lat": 47.5576,
    "lon": 10.7498,
    "structureHeightM": 65,
-   "groundElevationM": 1202
+   "groundElevationM": 1041
   },
   {
    "id": "matterhorn",
@@ -98,7 +98,7 @@
    "lat": 41.0086,
    "lon": 28.9802,
    "structureHeightM": 55,
-   "groundElevationM": 21
+   "groundElevationM": 4
   },
   {
    "id": "st-basils",
@@ -109,7 +109,7 @@
    "lat": 55.7525,
    "lon": 37.6231,
    "structureHeightM": 47,
-   "groundElevationM": 148
+   "groundElevationM": 143
   },
   {
    "id": "hallgrimskirkja",
@@ -120,7 +120,7 @@
    "lat": 64.1417,
    "lon": -21.9266,
    "structureHeightM": 74,
-   "groundElevationM": 19
+   "groundElevationM": 7
   },
   {
    "id": "giza-pyramids",
@@ -131,7 +131,7 @@
    "lat": 29.9792,
    "lon": 31.1342,
    "structureHeightM": 139,
-   "groundElevationM": 50
+   "groundElevationM": 43
   },
   {
    "id": "petra",
@@ -142,7 +142,7 @@
    "lat": 30.3285,
    "lon": 35.4444,
    "structureHeightM": 40,
-   "groundElevationM": 1151
+   "groundElevationM": 1028
   },
   {
    "id": "burj-khalifa",
@@ -153,7 +153,7 @@
    "lat": 25.1972,
    "lon": 55.2744,
    "structureHeightM": 828,
-   "groundElevationM": 0
+   "groundElevationM": 2
   },
   {
    "id": "kilimanjaro",
@@ -176,7 +176,7 @@
    "lat": -17.9243,
    "lon": 25.8572,
    "structureHeightM": 108,
-   "groundElevationM": 967
+   "groundElevationM": 895
   },
   {
    "id": "table-mountain",
@@ -199,7 +199,7 @@
    "lat": 27.1751,
    "lon": 78.0421,
    "structureHeightM": 73,
-   "groundElevationM": 167
+   "groundElevationM": 161
   },
   {
    "id": "everest",
@@ -222,7 +222,7 @@
    "lat": 40.3597,
    "lon": 116.02,
    "structureHeightM": 8,
-   "groundElevationM": 664
+   "groundElevationM": 715
   },
   {
    "id": "forbidden-city",
@@ -233,7 +233,7 @@
    "lat": 39.9163,
    "lon": 116.3972,
    "structureHeightM": 35,
-   "groundElevationM": 22
+   "groundElevationM": 45
   },
   {
    "id": "mount-fuji",
@@ -256,7 +256,7 @@
    "lat": 35.7101,
    "lon": 139.8107,
    "structureHeightM": 634,
-   "groundElevationM": 9
+   "groundElevationM": 3
   },
   {
    "id": "angkor-wat",
@@ -267,7 +267,7 @@
    "lat": 13.4125,
    "lon": 103.867,
    "structureHeightM": 65,
-   "groundElevationM": 11
+   "groundElevationM": 24
   },
   {
    "id": "ha-long-bay",
@@ -278,7 +278,7 @@
    "lat": 20.9101,
    "lon": 107.1839,
    "structureHeightM": 0,
-   "groundElevationM": 75
+   "groundElevationM": 0
   },
   {
    "id": "petronas-towers",
@@ -289,7 +289,7 @@
    "lat": 3.1579,
    "lon": 101.7116,
    "structureHeightM": 452,
-   "groundElevationM": 132
+   "groundElevationM": 46
   },
   {
    "id": "borobudur",
@@ -300,7 +300,7 @@
    "lat": -7.6079,
    "lon": 110.2038,
    "structureHeightM": 35,
-   "groundElevationM": 495
+   "groundElevationM": 272
   },
   {
    "id": "banaue-rice-terraces",
@@ -311,7 +311,7 @@
    "lat": 16.9333,
    "lon": 121.1333,
    "structureHeightM": 0,
-   "groundElevationM": 1374
+   "groundElevationM": 1087
   },
   {
    "id": "mayon-volcano",
@@ -334,7 +334,7 @@
    "lat": -33.8568,
    "lon": 151.2153,
    "structureHeightM": 65,
-   "groundElevationM": 8
+   "groundElevationM": 21
   },
   {
    "id": "uluru",
@@ -345,7 +345,7 @@
    "lat": -25.3444,
    "lon": 131.0369,
    "structureHeightM": 348,
-   "groundElevationM": 531
+   "groundElevationM": 559
   },
   {
    "id": "moai",
@@ -356,7 +356,7 @@
    "lat": -27.1258,
    "lon": -109.2768,
    "structureHeightM": 9,
-   "groundElevationM": 0
+   "groundElevationM": 30
   },
   {
    "id": "machu-picchu",
@@ -367,7 +367,7 @@
    "lat": -13.1631,
    "lon": -72.545,
    "structureHeightM": 20,
-   "groundElevationM": 2393
+   "groundElevationM": 2368
   },
   {
    "id": "aconcagua",
@@ -390,7 +390,7 @@
    "lat": -25.6953,
    "lon": -54.4367,
    "structureHeightM": 82,
-   "groundElevationM": 249
+   "groundElevationM": 194
   },
   {
    "id": "christ-the-redeemer",
@@ -401,7 +401,7 @@
    "lat": -22.9519,
    "lon": -43.2105,
    "structureHeightM": 30,
-   "groundElevationM": 8
+   "groundElevationM": 164
   },
   {
    "id": "chichen-itza",
@@ -412,7 +412,7 @@
    "lat": 20.6843,
    "lon": -88.5678,
    "structureHeightM": 30,
-   "groundElevationM": 32
+   "groundElevationM": 29
   },
   {
    "id": "statue-of-liberty",
@@ -423,7 +423,7 @@
    "lat": 40.6892,
    "lon": -74.0445,
    "structureHeightM": 93,
-   "groundElevationM": 9
+   "groundElevationM": 0
   },
   {
    "id": "golden-gate",
@@ -434,7 +434,7 @@
    "lat": 37.8199,
    "lon": -122.4783,
    "structureHeightM": 227,
-   "groundElevationM": 101
+   "groundElevationM": 11
   },
   {
    "id": "grand-canyon",
@@ -445,7 +445,7 @@
    "lat": 36.0618,
    "lon": -112.1076,
    "structureHeightM": 0,
-   "groundElevationM": 2231
+   "groundElevationM": 1718
   },
   {
    "id": "denali",
@@ -468,7 +468,7 @@
    "lat": 43.0962,
    "lon": -79.0377,
    "structureHeightM": 51,
-   "groundElevationM": 188
+   "groundElevationM": 175
   },
   {
    "id": "cn-tower",
@@ -479,7 +479,7 @@
    "lat": 43.6426,
    "lon": -79.3871,
    "structureHeightM": 553,
-   "groundElevationM": 134
+   "groundElevationM": 94
   }
  ]
 }

@@ -113,6 +113,7 @@ export class Trail {
     };
     this.mesh = new Mesh(this.geom, mat);
     this.mesh.frustumCulled = false;
+    this.mesh.renderOrder = 30; // after sky and clouds
   }
 
   reset() {

@@ -147,6 +147,7 @@ function Hud({ engine }: { engine: Engine }) {
         <Row k="Position" v={formatLatLon(t)} />
         <Row k="Local time" v={`${hud.localTime}${hud.timeScale === 0 ? " (paused)" : hud.timeScale !== 60 ? ` (×${hud.timeScale / 60})` : ""}`} />
         <Row k="Render" v={`${hud.fps} fps · ${hud.chunks} chunks`} />
+        {hud.streaming && <p className="streaming">Loading sharper terrain…</p>}
       </section>
 
       <section className="panel bottom-right">

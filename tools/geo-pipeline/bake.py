@@ -10,7 +10,11 @@ game loads at runtime. Every output is equirectangular (plate carree):
 Outputs (written to apps/web/public/geo/):
   height.png     4096x2048 RGB, Terrarium encoding, metres relative to sea level
                  elevation_m = (R*256 + G + B/256) - 32768
-                 Land = ETOPO1-derived topography, ocean = bathymetry.
+                 Land = topography, ocean = bathymetry. Global base, always loaded.
+  tiles/6/X_Y.webp 256x256 Terrarium tiles (lossless WebP) of the 16384x8192 working grid
+                 (~2.4 km per pixel), streamed around the plane. Only tiles that
+                 touch land are written; open ocean uses the base map.
+  tiles.json     tile manifest
   surface.png    8192x4096 RGBA, anti-aliased coverage masks (0..255)
                  R = land, G = lake, B = river, A = ice (glaciers + ice shelves)
   aux.png        4096x2048 RGB
@@ -43,66 +47,91 @@ OUT = ROOT / "apps" / "web" / "public" / "geo"
 HERE = Path(__file__).resolve().parent
 
 HEIGHT_W, HEIGHT_H = 4096, 2048
+WORK_W, WORK_H = 16384, 8192   # detail grid = tile level 6 (64 x 32 tiles of 256 px)
+TILE = 256
+TILE_LEVEL = 6
 SURF_W, SURF_H = 8192, 4096
 AUX_W, AUX_H = 4096, 2048
 SUPERSAMPLE = 2
 
 
 # --------------------------------------------------------------------------- DEM
-def load_etopo_vtp(path: Path) -> np.ndarray:
-    """ETOPO1-derived 10 arc-minute grid (pyvista vtk-data). Returns (1081, 2160)
-    array, rows lat +90 -> -90, cols lon 0 -> 360 (exclusive)."""
+class Grid:
+    """A global lat/lon grid. Row i is latitude lat_first - i*dlat, column j is
+    longitude lon_first + j*dlon (columns cover 360 degrees and wrap)."""
+
+    def __init__(self, data: np.ndarray, lat_first: float, lon_first: float, dlat: float, dlon: float, name: str, res_km: float):
+        self.data, self.lat_first, self.lon_first, self.dlat, self.dlon = data, lat_first, lon_first, dlat, dlon
+        self.name, self.res_km = name, res_km
+
+
+def load_etopo_vtp(path: Path) -> Grid:
+    """ETOPO1-derived 10 arc-minute grid (pyvista vtk-data), grid-registered."""
     import vtk  # type: ignore
     from vtk.util.numpy_support import vtk_to_numpy  # type: ignore
 
     reader = vtk.vtkXMLPolyDataReader()
     reader.SetFileName(str(path))
     reader.Update()
-    data = reader.GetOutput()
-    alt = vtk_to_numpy(data.GetPointData().GetArray("altitude")).astype(np.float32)
-    grid = alt.reshape(1081, 2161)[:, :2160]
-    return grid
+    alt = vtk_to_numpy(reader.GetOutput().GetPointData().GetArray("altitude")).astype(np.float32)
+    data = alt.reshape(1081, 2161)[:, :2160]
+    return Grid(data, 90.0, 0.0, 1 / 6, 1 / 6, "ETOPO1 Ice Surface, 10 arc-minute resample", 18.5)
 
 
-def load_dem(raw: Path) -> tuple[np.ndarray, str]:
-    """Pick the best DEM available in the raw folder.
+def load_etopo2022_tif(path: Path) -> Grid:
+    """ETOPO 2022 global GeoTIFF (pixel-is-area, top-left corner at -180, 90)."""
+    import tifffile  # type: ignore
 
-    Preferred (drop in manually, see docs/geodata.md): ETOPO 2022 GeoTIFF named
-    etopo2022*.tif (global, equirectangular, lon -180..180, lat 90..-90).
-    Fallback: ETOPO_10min_Ice.vtp (fetched automatically).
-    """
-    tifs = sorted(raw.glob("etopo2022*.tif"))
+    with tifffile.TiffFile(str(path)) as t:
+        page = t.pages[0]
+        sx = float(page.tags["ModelPixelScaleTag"].value[0])
+        tie = page.tags["ModelTiepointTag"].value
+        data = page.asarray().astype(np.float32)
+    lon_left, lat_top = float(tie[3]), float(tie[4])
+    nodata = data < -20000
+    if nodata.any():
+        data[nodata] = 0.0
+    res_km = 40075.0 * sx / 360.0
+    name = f"ETOPO 2022 Ice Surface, {round(sx * 3600)} arc-second ({path.name})"
+    return Grid(data, lat_top - sx / 2, lon_left + sx / 2, sx, sx, name, res_km)
+
+
+def load_dem(raw: Path) -> Grid:
+    """Best DEM available: an ETOPO 2022 GeoTIFF (ETOPO_2022*.tif or etopo2022*.tif,
+    downloaded manually, see docs/geodata.md), else the 10' ETOPO1 grid."""
+    tifs = sorted(list(raw.glob("ETOPO_2022*surface*.tif")) + list(raw.glob("etopo2022*.tif")))
     if tifs:
-        import tifffile  # type: ignore
-
-        arr = tifffile.imread(str(tifs[0])).astype(np.float32)
-        # Convert to the 0..360 column layout used below.
-        h, w = arr.shape
-        arr = np.roll(arr, w // 2, axis=1)
-        return arr, f"ETOPO 2022 ({tifs[0].name})"
+        return load_etopo2022_tif(tifs[0])
     vtp = raw / "ETOPO_10min_Ice.vtp"
     if not vtp.exists():
         sys.exit(f"No DEM found in {raw}. Run fetch_sources.sh first.")
-    return load_etopo_vtp(vtp), "ETOPO1 Ice Surface, 10 arc-minute resample"
+    return load_etopo_vtp(vtp)
 
 
-def resample_dem(src: np.ndarray, w: int, h: int) -> np.ndarray:
-    """Bicubic resample of a (rows: lat 90..-90 inclusive, cols: lon 0..360)
-    grid onto our pixel-centred equirectangular target."""
-    rows, cols = src.shape
+def resample(g: Grid, w: int, h: int) -> np.ndarray:
+    """Resample a Grid onto our pixel-centred equirectangular target, in strips
+    to bound memory. Cubic when upsampling, linear (after a light prefilter)
+    when downsampling."""
+    src = g.data
+    target_step = 360.0 / w
+    order = 3 if target_step < g.dlon else 1
+    if target_step > g.dlon * 1.2:
+        src = ndimage.gaussian_filter(src, sigma=0.5 * target_step / g.dlon)
     pad = 4
     padded = np.concatenate([src[:, -pad:], src, src[:, :pad]], axis=1)
     padded = np.concatenate([np.repeat(padded[:1], pad, 0), padded, np.repeat(padded[-1:], pad, 0)], axis=0)
-
+    del src
     lon = -180.0 + (np.arange(w) + 0.5) * 360.0 / w
-    lat = 90.0 - (np.arange(h) + 0.5) * 180.0 / h
-    lat_step = 180.0 / (rows - 1) if rows % 2 == 1 else 180.0 / rows
-    lon_step = 360.0 / cols
-    r = (90.0 - lat) / lat_step + pad
-    c = (np.mod(lon, 360.0)) / lon_step + pad
-    rr, cc = np.meshgrid(r, c, indexing="ij")
-    out = ndimage.map_coordinates(padded, [rr, cc], order=3, mode="nearest")
-    return out.astype(np.float32)
+    c = np.mod(lon - g.lon_first, 360.0) / g.dlon + pad
+    out = np.empty((h, w), np.float32)
+    strip = max(1, 2_000_000 // w)
+    for y0 in range(0, h, strip):
+        y1 = min(h, y0 + strip)
+        lat = 90.0 - (np.arange(y0, y1) + 0.5) * 180.0 / h
+        r = (g.lat_first - lat) / g.dlat + pad
+        rr, cc = np.meshgrid(r, c, indexing="ij")
+        out[y0:y1] = ndimage.map_coordinates(padded, [rr, cc], order=order, mode="nearest")
+    return out
 
 
 # ------------------------------------------------------------------- rasterising
@@ -161,9 +190,9 @@ def to_xy(ring_ll, w, h):
     return list(zip(x.tolist(), y.tolist()))
 
 
-def raster_polygons(files: list[Path], w: int, h: int, feature_filter=None) -> np.ndarray:
-    """Anti-aliased polygon coverage, 0..1 float32 at (h, w)."""
-    W, H = w * SUPERSAMPLE, h * SUPERSAMPLE
+def raster_polygons(files: list[Path], w: int, h: int, feature_filter=None, ss: int = SUPERSAMPLE) -> np.ndarray:
+    """Polygon coverage, 0..1 float32 at (h, w), anti-aliased when ss > 1."""
+    W, H = w * ss, h * ss
     img = Image.new("L", (W, H), 0)
     draw = ImageDraw.Draw(img)
     for path in files:
@@ -176,29 +205,37 @@ def raster_polygons(files: list[Path], w: int, h: int, feature_filter=None) -> n
                     if len(variant) < 3:
                         continue
                     draw.polygon(to_xy(variant, W, H), fill=255 if i == 0 else 0)
-    img = img.resize((w, h), Image.BOX)
+    if ss > 1:
+        img = img.resize((w, h), Image.BOX)
     return np.asarray(img, dtype=np.float32) / 255.0
 
 
-def raster_lines(path: Path, w: int, h: int, width_fn) -> np.ndarray:
-    W, H = w * SUPERSAMPLE, h * SUPERSAMPLE
+def raster_lines(path: Path, w: int, h: int, width_fn, ss: int = SUPERSAMPLE) -> np.ndarray:
+    W, H = w * ss, h * ss
     img = Image.new("L", (W, H), 0)
     draw = ImageDraw.Draw(img)
     gj = json.loads(path.read_text())
     for feat, line in iter_lines(gj):
-        width = width_fn(feat) * SUPERSAMPLE
+        width = width_fn(feat) * ss
         if width <= 0:
             continue
         for variant in ring_variants(line):
             if len(variant) < 2:
                 continue
             draw.line(to_xy(variant, W, H), fill=255, width=max(1, int(round(width))), joint="curve")
-    img = img.resize((w, h), Image.BOX)
+    if ss > 1:
+        img = img.resize((w, h), Image.BOX)
     return np.asarray(img, dtype=np.float32) / 255.0
 
 
 def downsample(a: np.ndarray, w: int, h: int) -> np.ndarray:
+    """Box-downsample a 0..1 coverage mask."""
     return np.asarray(Image.fromarray((a * 255).astype(np.uint8)).resize((w, h), Image.BOX), np.float32) / 255.0
+
+
+def downsample_f(a: np.ndarray, w: int, h: int) -> np.ndarray:
+    """Box-downsample a float field (metres)."""
+    return np.array(Image.fromarray(a.astype(np.float32), "F").resize((w, h), Image.BOX), np.float32)
 
 
 # ------------------------------------------------------------------- height fix-up
@@ -234,13 +271,13 @@ def flatten_lakes(E: np.ndarray, lake: np.ndarray) -> int:
     return n
 
 
-def sharpen_peaks(E: np.ndarray, peaks: list[dict]) -> list[dict]:
-    """The 10' DEM averages summits away. Restore real summit heights with a
+def sharpen_peaks(E: np.ndarray, peaks: list[dict], sigma_km: float) -> list[dict]:
+    """Gridded DEMs average summits away. Restore real summit heights with a
     narrow Gaussian bump centred on each known peak."""
     h, w = E.shape
     report = []
-    sigma = 1.3  # pixels (~13 km at the equator)
-    rad = 6
+    sigma = sigma_km / (40075.0 / w)  # in pixels
+    rad = int(math.ceil(sigma * 4.5))
     for p in peaks:
         x = (p["lon"] + 180.0) / 360.0 * w - 0.5
         y = (90.0 - p["lat"]) / 180.0 * h - 0.5
@@ -249,17 +286,22 @@ def sharpen_peaks(E: np.ndarray, peaks: list[dict]) -> list[dict]:
         if p["summitM"] - before <= 0:
             report.append({"id": p["id"], "before": round(before), "after": round(before)})
             continue
-        # A few passes so the bilinear-sampled summit converges on the real height.
-        for _ in range(4):
-            delta = p["summitM"] - bilinear(E, p["lat"], p["lon"])
-            if abs(delta) < 5:
+        # Blend each pixel towards a target height with a Gaussian weight (no
+        # overshoot far from the peak), then nudge the target until the
+        # bilinear-sampled summit matches the real one.
+        ys = np.arange(cy - rad, cy + rad + 1)
+        xs = np.arange(cx - rad, cx + rad + 1)
+        ys = ys[(ys >= 0) & (ys < h)]
+        xw = xs % w
+        orig = E[np.ix_(ys, xw)].copy()
+        g = np.exp(-(((xs[None, :] - x) ** 2) + ((ys[:, None] - y) ** 2)) / (2 * sigma * sigma))
+        target = float(p["summitM"])
+        for _ in range(6):
+            E[np.ix_(ys, xw)] = np.where(orig < target, orig + (target - orig) * g, orig)
+            err = p["summitM"] - bilinear(E, p["lat"], p["lon"])
+            if abs(err) < 3:
                 break
-            for yy in range(cy - rad, cy + rad + 1):
-                if not 0 <= yy < h:
-                    continue
-                for xx in range(cx - rad, cx + rad + 1):
-                    d2 = (xx - x) ** 2 + (yy - y) ** 2
-                    E[yy, xx % w] += delta * math.exp(-d2 / (2 * sigma * sigma))
+            target += err
         report.append({"id": p["id"], "before": round(before), "after": round(bilinear(E, p["lat"], p["lon"]))})
     return report
 
@@ -291,51 +333,86 @@ def main() -> None:
             sys.exit(f"Missing {p}. Run fetch_sources.sh first.")
         return p
 
-    print("1/7 DEM")
-    dem, dem_source = load_dem(raw)
-    E = resample_dem(dem, HEIGHT_W, HEIGHT_H)
+    print("1/8 DEM")
+    dem = load_dem(raw)
+    print(f"    {dem.name}: {dem.data.shape[1]}x{dem.data.shape[0]}, ~{dem.res_km:.1f} km")
+    E = resample(dem, WORK_W, WORK_H)
+    dem_name, dem_res_km = dem.name, dem.res_km
+    del dem
 
-    print("2/7 land / lakes / ice at", SURF_W, "x", SURF_H)
-    land = raster_polygons([ne("ne_10m_land"), ne("ne_10m_minor_islands")], SURF_W, SURF_H)
-    lakes = raster_polygons([ne("ne_10m_lakes"), ne("ne_10m_lakes_europe"), ne("ne_10m_lakes_north_america")], SURF_W, SURF_H)
-    ice = raster_polygons([ne("ne_10m_glaciated_areas"), ne("ne_10m_antarctic_ice_shelves_polys")], SURF_W, SURF_H)
+    print("2/8 land / lakes / ice / rivers at", WORK_W, "x", WORK_H)
+    land_w = raster_polygons([ne("ne_10m_land"), ne("ne_10m_minor_islands")], WORK_W, WORK_H, ss=1)
+    lakes_w = raster_polygons([ne("ne_10m_lakes"), ne("ne_10m_lakes_europe"), ne("ne_10m_lakes_north_america")], WORK_W, WORK_H, ss=1)
+    ice_w = raster_polygons([ne("ne_10m_glaciated_areas"), ne("ne_10m_antarctic_ice_shelves_polys")], WORK_W, WORK_H, ss=1)
     # Ice shelves float on the sea: they count as surface for the player.
-    land = np.maximum(land, ice)
+    land_w = np.maximum(land_w, ice_w)
 
-    print("3/7 rivers")
     def river_width(feat):
         props = feat.get("properties", {})
         if props.get("featurecla", "").lower().startswith("lake centerline"):
             return 0
         sr = props.get("scalerank", 6) or 6
-        return max(0.6, 2.4 - 0.25 * float(sr))
-    rivers = raster_lines(ne("ne_10m_rivers_lake_centerlines"), SURF_W, SURF_H, river_width)
-    rivers = np.minimum(rivers, land)
+        return 2 * max(0.6, 2.4 - 0.25 * float(sr))  # pixels at the 16384 working grid
+    rivers_w = np.minimum(raster_lines(ne("ne_10m_rivers_lake_centerlines"), WORK_W, WORK_H, river_width, ss=1), land_w)
 
-    surface = np.stack([land, lakes, rivers, ice], axis=-1)
+    # Display masks: box-downsample 2x for anti-aliasing.
+    surface = np.stack([downsample(m, SURF_W, SURF_H) for m in (land_w, lakes_w, rivers_w, ice_w)], axis=-1)
     Image.fromarray((surface * 255).round().astype(np.uint8), "RGBA").save(OUT / "surface.png", optimize=True)
+    del rivers_w, ice_w, surface
 
-    print("4/7 height consistency (coastlines, lakes, peaks)")
-    land4 = downsample(land, HEIGHT_W, HEIGHT_H)
-    lake4 = downsample(lakes, HEIGHT_W, HEIGHT_H)
-    is_land = land4 >= 0.5
-    E = np.where(is_land & (lake4 < 0.5), np.maximum(E, 1.0), E)
-    E = np.where(~is_land, np.minimum(E, -2.0), E)
-    n_lakes = flatten_lakes(E, lake4)
-
+    print("3/8 height consistency at the working grid (coastlines, lakes, peaks)")
+    is_land = land_w >= 0.5
+    is_lake = lakes_w >= 0.5
+    np.maximum(E, 1.0, out=E, where=is_land & ~is_lake)
+    np.minimum(E, -2.0, out=E, where=~is_land)
+    n_lakes = flatten_lakes(E, lakes_w)
     src = json.loads((HERE / "landmarks.source.json").read_text())["landmarks"]
     peaks = [l for l in src if l.get("summitM")]
-    peak_report = sharpen_peaks(E, peaks)
+    sigma_km = max(6.0, dem_res_km * 0.7)
+    peak_report = sharpen_peaks(E, peaks, sigma_km)
+    np.round(E, out=E)
 
-    # Whole metres: the source is accurate to ~10 m at best, and dropping the
-    # sub-metre fraction (B channel = 0) roughly halves the PNG size.
-    E = np.round(E)
-    rgb = encode_terrarium(E)
-    err = float(np.abs(decode_terrarium(rgb) - E).max())
+    print("4/8 detail tiles")
+    tiles_dir = OUT / "tiles" / str(TILE_LEVEL)
+    if tiles_dir.exists():
+        for f in tiles_dir.iterdir():
+            f.unlink()
+    tiles_dir.mkdir(parents=True, exist_ok=True)
+    cols, rows = WORK_W // TILE, WORK_H // TILE
+    written = []
+    tile_bytes = 0
+    for ty in range(rows):
+        for tx in range(cols):
+            ys, xs = slice(ty * TILE, (ty + 1) * TILE), slice(tx * TILE, (tx + 1) * TILE)
+            if not is_land[ys, xs].any():
+                continue  # open ocean: the base map is enough
+            fn = tiles_dir / f"{tx}_{ty}.webp"
+            Image.fromarray(encode_terrarium(E[ys, xs]), "RGB").save(fn, "WEBP", lossless=True, quality=80, method=4)
+            tile_bytes += fn.stat().st_size
+            written.append(f"{tx}_{ty}")
+    (OUT / "tiles.json").write_text(json.dumps({
+        "level": TILE_LEVEL, "tileSize": TILE, "cols": cols, "rows": rows,
+        "degreesPerTile": 360.0 / cols, "encoding": "terrarium", "format": "webp", "tiles": written,
+    }, separators=(",", ":")))
+    print(f"    {len(written)} tiles, {tile_bytes / 1e6:.1f} MB")
+    del is_land, is_lake
+
+    print("5/8 global base height")
+    Eb = downsample_f(E, HEIGHT_W, HEIGHT_H)
+    land4 = downsample(land_w, HEIGHT_W, HEIGHT_H)
+    lake4 = downsample(lakes_w, HEIGHT_W, HEIGHT_H)
+    del lakes_w
+    np.maximum(Eb, 1.0, out=Eb, where=(land4 >= 0.5) & (lake4 < 0.5))
+    np.minimum(Eb, -2.0, out=Eb, where=land4 < 0.5)
+    flatten_lakes(Eb, lake4)
+    Eb = np.round(Eb)
+    rgb = encode_terrarium(Eb)
+    err = float(np.abs(decode_terrarium(rgb) - Eb).max())
     assert err < 0.01, f"terrarium round-trip error {err}"
     Image.fromarray(rgb, "RGB").save(OUT / "height.png", optimize=True)
+    land = land_w  # used below for lights
 
-    print("5/7 lights + desert")
+    print("6/8 lights + desert")
     lights = raster_polygons([ne("ne_10m_urban_areas")], AUX_W, AUX_H)
     pts = Image.new("L", (AUX_W, AUX_H), 0)
     d = ImageDraw.Draw(pts)
@@ -364,7 +441,7 @@ def main() -> None:
     aux = np.stack([lights_f, desert, np.zeros_like(desert)], axis=-1)
     Image.fromarray((aux * 255).round().astype(np.uint8), "RGB").save(OUT / "aux.png", optimize=True)
 
-    print("6/7 cities + landmarks")
+    print("7/8 cities + landmarks")
     cities = []
     for f in places:
         p = f["properties"]
@@ -391,18 +468,21 @@ def main() -> None:
         landmarks.append(out)
     (OUT / "landmarks.json").write_text(json.dumps({"landmarks": landmarks}, ensure_ascii=False, indent=1))
 
-    print("7/7 meta")
+    print("8/8 meta")
     meta = {
         "bakedAt": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
         "projection": "equirectangular; x: lon -180..180, y: lat 90..-90, pixel centres",
         "height": {"file": "height.png", "width": HEIGHT_W, "height": HEIGHT_H, "encoding": "terrarium",
                     "decode": "elevation_m = R*256 + G + B/256 - 32768", "verticalDatum": "mean sea level",
-                    "minM": round(float(E.min())), "maxM": round(float(E.max())), "source": dem_source},
+                    "minM": round(float(Eb.min())), "maxM": round(float(Eb.max())), "source": dem_name},
+        "detail": {"manifest": "tiles.json", "width": WORK_W, "height": WORK_H, "tileSize": TILE, "level": TILE_LEVEL,
+                    "minM": round(float(E.min())), "maxM": round(float(E.max())), "sourceResolutionKm": round(dem_res_km, 2),
+                    "tiles": len(written)},
         "surface": {"file": "surface.png", "width": SURF_W, "height": SURF_H, "channels": {"r": "land", "g": "lake", "b": "river", "a": "ice"}},
         "aux": {"file": "aux.png", "width": AUX_W, "height": AUX_H, "channels": {"r": "cityLights", "g": "desert", "b": "reserved"}},
-        "stats": {"lakes": n_lakes, "cities": len(cities), "landmarks": len(landmarks), "peaks": peak_report},
+        "stats": {"lakes": n_lakes, "peakSigmaKm": round(sigma_km, 1), "cities": len(cities), "landmarks": len(landmarks), "peaks": peak_report},
         "sources": [
-            {"name": dem_source, "by": "NOAA NCEI (via pyvista/vtk-data)", "licence": "Public domain (US Government)"},
+            {"name": dem_name, "by": "NOAA NCEI", "licence": "Public domain (US Government)"},
             {"name": "Natural Earth 1:10m vectors", "by": "naturalearthdata.com", "licence": "Public domain"},
         ],
     }

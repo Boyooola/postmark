@@ -3,12 +3,12 @@
 A cozy airmail flying game on a real Earth. Start a one-plane mail company in your hometown, fly letters
 across real mountains, coastlines and lakes, and grow it across a century of flight.
 
-**Status:** prototype, milestone 1 (flight on a real Earth). See [docs/milestones.md](docs/milestones.md).
+**Status:** prototype, milestone 1.5 (sharper Earth: ETOPO 2022 terrain streaming and clouds). See [docs/milestones.md](docs/milestones.md).
 
 | | |
 | --- | --- |
-| ![Approaching the Matterhorn](docs/images/alps.jpg) | ![Norwegian fjords and lakes](docs/images/fjords.jpg) |
-| ![Day and night over the Atlantic](docs/images/terminator.jpg) | ![Europe at night](docs/images/europe-night.jpg) |
+| ![Approaching the Matterhorn](docs/images/alps.jpg) | ![Norwegian fjords](docs/images/fjords.jpg) |
+| ![Sunset over Aconcagua](docs/images/andes-sunset.jpg) | ![Clouds over Africa and Europe](docs/images/orbit-clouds.jpg) |
 
 ## Run it
 
@@ -41,5 +41,5 @@ pnpm geo:fetch && pnpm geo:bake   # rebuild the geo data (needs Python, see tool
 
 ## Data credits
 
-Elevation and bathymetry: ETOPO1, NOAA National Centers for Environmental Information (public domain).
+Elevation and bathymetry: ETOPO 2022 (and ETOPO1 as a fallback), NOAA National Centers for Environmental Information (public domain).
 Coastlines, lakes, rivers, ice, cities: [Natural Earth](https://www.naturalearthdata.com) (public domain).

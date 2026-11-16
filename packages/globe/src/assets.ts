@@ -13,6 +13,7 @@ import {
   type WebGLRenderer,
 } from "three";
 import { HeightField, type City, type Landmark } from "@postmark/game-core";
+import type { TileManifest } from "./terrain/DetailTerrain";
 
 export interface GeoMeta {
   height: { width: number; height: number; minM: number; maxM: number; source: string };
@@ -29,6 +30,8 @@ export interface GeoAssets {
   auxTexture: Texture;
   landmarks: Landmark[];
   cities: City[];
+  tiles: TileManifest | null;
+  floatLinear: boolean;
 }
 
 export type Progress = (label: string, fraction: number) => void;
@@ -71,10 +74,11 @@ function colourTexture(bmp: ImageBitmap): Texture {
 export async function loadGeoAssets(base: string, renderer: WebGLRenderer, progress: Progress = () => {}): Promise<GeoAssets> {
   const maxTex = renderer.capabilities.maxTextureSize;
   progress("Reading the atlas", 0.02);
-  const [meta, landmarks, cities] = await Promise.all([
+  const [meta, landmarks, cities, tiles] = await Promise.all([
     fetch(`${base}/meta.json`).then((r) => r.json() as Promise<GeoMeta>),
     fetch(`${base}/landmarks.json`).then((r) => r.json()).then((j) => j.landmarks as Landmark[]),
     fetch(`${base}/cities.json`).then((r) => r.json()).then((j) => j.cities as City[]),
+    fetch(`${base}/tiles.json`).then((r) => (r.ok ? (r.json() as Promise<TileManifest>) : null)).catch(() => null),
   ]);
 
   progress("Loading elevation data", 0.1);
@@ -111,6 +115,8 @@ export async function loadGeoAssets(base: string, renderer: WebGLRenderer, progr
     auxTexture: colourTexture(auxBmp),
     landmarks,
     cities,
+    tiles,
+    floatLinear,
   };
 }
 

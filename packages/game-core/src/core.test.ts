@@ -3,6 +3,7 @@ import {
   FLIGHT,
   FlightModel,
   HeightField,
+  TerrainHeights,
   WORLD_RADIUS,
   bearingDeg,
   distanceKm,
@@ -98,5 +99,36 @@ describe("FlightModel", () => {
     const h = f.telemetry().headingDeg;
     expect(h).toBeGreaterThan(20);
     expect(h).toBeLessThan(180);
+  });
+});
+
+describe("TerrainHeights", () => {
+  // Base: flat 100 m everywhere. Detail window: 10°x10° at 500 m, centred on (5, 5).
+  const base = new HeightField(4, 2, new Float32Array(8).fill(100));
+  const make = () => {
+    const t = new TerrainHeights(base);
+    t.detail = { data: new Float32Array(64 * 64).fill(500), size: 64, lon0: 0, lat0: 10, spanDeg: 10 };
+    return t;
+  };
+
+  it("uses the detail window inside it and the base map outside", () => {
+    const t = make();
+    expect(t.sample(5, 5)).toBeCloseTo(500);
+    expect(t.sample(-20, 40)).toBeCloseTo(100);
+  });
+
+  it("blends smoothly at the window edge", () => {
+    const t = make();
+    const nearEdge = t.sample(5, 0.2); // 2% in from the west edge, inside the fade band
+    expect(nearEdge).toBeGreaterThan(100);
+    expect(nearEdge).toBeLessThan(500);
+  });
+
+  it("handles windows that cross the antimeridian", () => {
+    const t = new TerrainHeights(base);
+    t.detail = { data: new Float32Array(16 * 16).fill(700), size: 16, lon0: 175, lat0: 10, spanDeg: 10 };
+    expect(t.sample(5, -180)).toBeCloseTo(700);
+    expect(t.sample(5, 179)).toBeCloseTo(700);
+    expect(t.sample(5, -170)).toBeCloseTo(100);
   });
 });

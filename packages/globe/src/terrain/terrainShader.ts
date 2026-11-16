@@ -1,12 +1,12 @@
-import { atmosphereChunk, equirectSampleChunk, geoChunk, noiseChunk } from "../shaders/chunks";
+import { atmosphereChunk, cloudChunk, equirectSampleChunk, geoChunk, heightChunk, noiseChunk } from "../shaders/chunks";
 
 export const terrainVertex = /* glsl */ `
 #include <common>
 #include <logdepthbuf_pars_vertex>
 ${geoChunk}
+${heightChunk}
 attribute vec4 aChunk;        // face-space x0, y0, size, face index
 uniform mat3 uFaces[6];
-uniform sampler2D uHeight;    // metres, R channel, equirectangular
 uniform sampler2D uSurface;   // land, lake, river, ice
 uniform float uRadius;
 uniform float uElevScale;     // metres -> world units (includes exaggeration)
@@ -27,7 +27,7 @@ void main() {
   int face = int(aChunk.w + 0.5);
   vec3 dir = normalize(spherify(uFaces[face] * vec3(st, 1.0)));
   vec2 uv = dirToUV(dir);
-  float h = textureLod(uHeight, uv, 0.0).r;
+  float h = heightAt(dir).x;
   float lake = textureLod(uSurface, uv, 0.0).g;
   float disp = lake > 0.5 ? h : max(h, 0.0);
   float r = uRadius + disp * uElevScale - position.z * aChunk.z * uSkirt;
@@ -43,13 +43,14 @@ export const terrainFragment = /* glsl */ `
 #include <common>
 #include <logdepthbuf_pars_fragment>
 ${geoChunk}
+${heightChunk}
 ${equirectSampleChunk}
 ${noiseChunk}
 ${atmosphereChunk}
-uniform sampler2D uHeight;
+${cloudChunk}
 uniform sampler2D uSurface;
 uniform sampler2D uAux;
-uniform vec2 uHeightTexel;    // 1/width, 1/height
+uniform vec2 uStepRad;        // angular sample step: base map, detail window
 uniform float uElevScale;
 uniform vec3 uCamPos;
 uniform float uHaze;
@@ -85,19 +86,20 @@ void main() {
   vec2 ll = dirToLatLon(dir);
   float alat = abs(ll.x) * 180.0 / PI;
 
-  // Real elevation and surface slope from the heightmap
-  float h  = texture(uHeight, uv).r;
-  float hE = texture(uHeight, uv + vec2(uHeightTexel.x, 0.0)).r;
-  float hW = texture(uHeight, uv - vec2(uHeightTexel.x, 0.0)).r;
-  float hN = texture(uHeight, uv - vec2(0.0, uHeightTexel.y)).r;
-  float hS = texture(uHeight, uv + vec2(0.0, uHeightTexel.y)).r;
-  float cosLat = max(cos(ll.x), 0.03);
-  float dxE = 2.0 * uHeightTexel.x * 2.0 * PI * uRadius * cosLat;
-  float dyN = 2.0 * uHeightTexel.y * PI * uRadius;
-  float sE = (max(hE, 0.0) - max(hW, 0.0)) * uElevScale / dxE;
-  float sN = (max(hN, 0.0) - max(hS, 0.0)) * uElevScale / dyN;
+  // Real elevation and surface slope from the heightmap (finite differences
+  // along the local east/north great circles, one texel apart).
   vec3 north = normalize(vec3(0.0, 1.0, 0.0) - dir * dir.y + vec3(1e-6, 0.0, 0.0));
   vec3 east = normalize(cross(north, dir));
+  vec2 hw = heightAt(dir);
+  float h = hw.x;
+  float stp = mix(uStepRad.x, uStepRad.y, step(0.5, hw.y));
+  float hE = heightAt(normalize(dir + east * stp)).x;
+  float hW = heightAt(normalize(dir - east * stp)).x;
+  float hN = heightAt(normalize(dir + north * stp)).x;
+  float hS = heightAt(normalize(dir - north * stp)).x;
+  float arc = 2.0 * stp * uRadius;
+  float sE = (max(hE, 0.0) - max(hW, 0.0)) * uElevScale / arc;
+  float sN = (max(hN, 0.0) - max(hS, 0.0)) * uElevScale / arc;
   vec3 nLand = normalize(dir - east * sE - north * sN);
   float slope = length(vec2(sE, sN)); // rise over run in rendered (exaggerated) space
 
@@ -105,7 +107,7 @@ void main() {
   // (normals only, geometry stays true to the data). Stronger in mountains,
   // fades out with distance.
   float camDist = length(vWorld - uCamPos);
-  float detailAmt = (0.12 + 0.55 * smoothstep(300.0, 3000.0, h) + 0.4 * smoothstep(0.2, 0.8, slope))
+  float detailAmt = (0.08 + 0.3 * smoothstep(300.0, 3000.0, h) + 0.25 * smoothstep(0.2, 0.8, slope))
                     * (1.0 - smoothstep(25.0, 120.0, camDist)) * step(0.0, h);
   if (detailAmt > 0.001) {
     vec3 q = dir * 1400.0;
@@ -136,6 +138,9 @@ void main() {
   // Lighting
   vec3 V = normalize(uCamPos - vWorld);
   vec3 sunCol = sunlightAt(vWorld + dir * 0.05) * 2.3;
+  // Cloud shadows (the layer drifts, so they move across the ground).
+  float cloudHere = cloudDensity(dir);
+  sunCol *= 1.0 - 0.55 * cloudHere;
   float ndl = max(dot(n, uSunDir), 0.0);
   float day = smoothstep(-0.15, 0.2, dot(dir, uSunDir));
   vec3 ambient = vec3(0.35, 0.45, 0.65) * 0.12 * day + vec3(0.02, 0.03, 0.05);
@@ -158,7 +163,7 @@ void main() {
   float lights = mix(glow, pts * 1.4 + glow * 0.05, near);
   // The light map is ~10 km per pixel; keep it off mountainsides and high ground.
   lights *= mix(1.0, 0.12, smoothstep(350.0, 1200.0, h)) * (1.0 - 0.8 * smoothstep(0.2, 0.55, slope));
-  col += lights * vec3(1.0, 0.72, 0.38) * night * uNightLights * (1.0 - water * 0.9);
+  col += lights * vec3(1.0, 0.72, 0.38) * night * uNightLights * (1.0 - water * 0.9) * (1.0 - 0.6 * cloudHere);
 
   // Aerial perspective
   vec3 toFrag = vWorld - uCamPos;

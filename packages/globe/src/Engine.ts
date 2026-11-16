@@ -14,6 +14,7 @@ import { CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import {
   FlightModel,
+  TerrainHeights,
   WORLD_RADIUS,
   latLonToDirection,
   nearest,
@@ -27,7 +28,10 @@ import { Input, type ActionKey } from "./Input";
 import { Landmarks } from "./Landmarks";
 import { Trail, createPlaneModel } from "./Plane";
 import { Sky } from "./Sky";
+import { Clouds } from "./Clouds";
+import { createCloudUniforms } from "./cloudParams";
 import { TerrainLOD } from "./terrain/TerrainLOD";
+import { DetailTerrain } from "./terrain/DetailTerrain";
 
 export type CameraMode = "chase" | "orbit";
 
@@ -50,6 +54,8 @@ export interface HudState {
   cameraMode: CameraMode;
   fps: number;
   chunks: number;
+  /** a sharper terrain window is loading */
+  streaming: boolean;
 }
 
 export interface EngineOptions {
@@ -78,7 +84,11 @@ export class Engine {
 
   private assets!: GeoAssets;
   private terrain!: TerrainLOD;
+  private heights!: TerrainHeights;
+  private detail: DetailTerrain | null = null;
   private sky!: Sky;
+  private clouds!: Clouds;
+  private cloudUniforms = createCloudUniforms();
   private landmarks!: Landmarks;
   private flight!: FlightModel;
   private plane = createPlaneModel();
@@ -138,20 +148,42 @@ export class Engine {
     this.assets = await loadGeoAssets(opts.assetBase, this.renderer, opts.onProgress);
     if (this.disposed) return;
     const atmo = createAtmosphereUniforms(this.sun);
+    this.heights = new TerrainHeights(this.assets.heights);
+    const surface = (lat: number, lon: number) => this.heights.surface(lat, lon);
 
+    if (this.assets.tiles) {
+      this.detail = new DetailTerrain(opts.assetBase, this.assets.tiles, this.heights, this.assets.floatLinear, (w) => {
+        this.terrain?.setDetailWindow(w);
+        this.landmarks?.reposition();
+      });
+    }
     this.terrain = new TerrainLOD(
-      { height: this.assets.heightTexture, heightSize: this.assets.heights, surface: this.assets.surfaceTexture, aux: this.assets.auxTexture },
+      {
+        height: this.assets.heightTexture,
+        heightSize: this.assets.heights,
+        detail: this.detail?.texture ?? this.assets.heightTexture,
+        surface: this.assets.surfaceTexture,
+        aux: this.assets.auxTexture,
+      },
       atmo,
+      this.cloudUniforms,
     );
     this.sky = new Sky(atmo);
-    this.landmarks = new Landmarks(this.assets.landmarks, this.assets.heights);
-    this.flight = new FlightModel((lat, lon) => this.assets.heights.surface(lat, lon));
+    this.clouds = new Clouds(atmo, this.cloudUniforms);
+    this.landmarks = new Landmarks(this.assets.landmarks, surface);
+    this.flight = new FlightModel(surface);
 
-    this.scene.add(this.terrain.mesh, this.sky.group, this.landmarks.group, this.plane.root, this.sunLight, this.sunLight.target, this.hemi);
+    this.scene.add(this.terrain.mesh, this.sky.group, this.clouds.mesh, this.landmarks.group, this.plane.root, this.sunLight, this.sunLight.target, this.hemi);
     for (const t of this.trails) this.scene.add(t.mesh);
 
     const s = { ...DEFAULT_START, ...opts.start };
     this.utcHours = s.utcHours ?? DEFAULT_START.utcHours;
+    if (this.detail) {
+      opts.onProgress?.("Streaming terrain around you", 0.95);
+      const deg = this.assets.tiles!.degreesPerTile;
+      await this.detail.load((s.lon + 180) / deg, (90 - s.lat) / deg);
+      if (this.disposed) return;
+    }
     this.spawn(s.lat, s.lon, s.headingDeg, s.aglM);
     this.snapCamera();
 
@@ -164,6 +196,11 @@ export class Engine {
     this.loop();
   }
 
+  /** True while a new high-resolution terrain window is loading. */
+  get streaming(): boolean {
+    return this.detail?.loading ?? false;
+  }
+
   get landmarkList(): Landmark[] {
     return this.assets?.landmarks ?? [];
   }
@@ -173,6 +210,7 @@ export class Engine {
     this.lastSpawn = { lat, lon, headingDeg, aglM, utcHours: this.utcHours };
     this.flight.spawn(lat, lon, headingDeg, aglM);
     this.trails.forEach((t) => t.reset());
+    this.detail?.update(lat, lon, true);
   }
 
   /** Fly towards a landmark from ~40 km south of it. */
@@ -180,7 +218,7 @@ export class Engine {
     const lm = this.assets.landmarks.find((l) => l.id === id);
     if (!lm) return;
     const lat = Math.max(-89, lm.lat - 0.38);
-    const agl = lm.kind === "mountain" ? Math.max(1500, (lm.summitM ?? 0) - this.assets.heights.surface(lat, lm.lon) + 800) : 1400;
+    const agl = lm.kind === "mountain" ? Math.max(1500, (lm.summitM ?? 0) - this.heights.surface(lat, lm.lon) + 800) : 1400;
     this.spawn(lat, lm.lon, 0, agl);
     if (this.cameraMode === "orbit") this.setCameraMode("chase");
     this.snapCamera();
@@ -201,6 +239,11 @@ export class Engine {
 
   setTimeScale(s: number) {
     this.timeScale = Math.max(0, Math.min(3600 * 4, s));
+  }
+
+  /** 0 = clear skies, 1 = overcast. */
+  setCloudCover(c: number) {
+    this.cloudUniforms.uCloudCover.value = Math.max(0, Math.min(1, c));
   }
 
   setPaused(p: boolean) {
@@ -234,7 +277,12 @@ export class Engine {
     const t = this.timer.getElapsed();
     if (!this.paused) {
       this.utcHours = (this.utcHours + (dt * this.timeScale) / 3600 + 24) % 24;
+      this.cloudUniforms.uCloudTime.value += dt * Math.max(1, this.timeScale / 60);
       this.flight.update(dt, this.input.read(dt));
+    }
+    if (this.detail) {
+      const p = this.flight.telemetry();
+      this.detail.update(p.lat, p.lon);
     }
     this.updateSun();
     this.updatePlane(t);
@@ -243,6 +291,7 @@ export class Engine {
 
     this.terrain.update(this.camera);
     this.sky.update(this.camera.position, this.sun);
+    this.clouds.update(this.camera.position);
     this.landmarks.update(this.camera.position);
     this.renderer.render(this.scene, this.camera);
     this.labels.render(this.scene, this.camera);
@@ -339,6 +388,7 @@ export class Engine {
       cameraMode: this.cameraMode,
       fps: this.fps,
       chunks: this.terrain.chunksDrawn,
+      streaming: this.streaming,
     });
   }
 
@@ -358,7 +408,9 @@ export class Engine {
     this.timer.dispose();
     this.orbit.dispose();
     this.terrain?.dispose();
+    this.detail?.dispose();
     this.sky?.dispose();
+    this.clouds?.dispose();
     this.assets?.heightTexture.dispose();
     this.assets?.surfaceTexture.dispose();
     this.assets?.auxTexture.dispose();

@@ -20,8 +20,10 @@ docs/                  geodata, blender pipeline, milestones
 | Piece | File | Notes |
 | --- | --- | --- |
 | Engine | `Engine.ts` | Owns renderer, scene, loop, sun, cameras, HUD ticks; `debugView()` helps with screenshots and tests |
-| Assets | `assets.ts` | Loads `/geo/*`; decodes Terrarium to a `HeightField` (CPU) and a float texture (GPU); downsizes masks to the GPU's max texture size |
+| Assets | `assets.ts` | Loads `/geo/*` (incl. the tile manifest); decodes Terrarium to a `HeightField` (CPU) and a float texture (GPU); downsizes masks to the GPU's max texture size |
 | Terrain | `terrain/TerrainLOD.ts`, `terrainShader.ts` | Six cube faces, quadtree split by distance, one instanced 33×33 grid with skirts; displacement and shading in GLSL |
+| Terrain streaming | `terrain/DetailTerrain.ts` + game-core `terrainHeights.ts` | 45° detail window of streamed tiles around the plane; `heightAt()` in GLSL and `TerrainHeights.sample()` on the CPU blend it identically |
+| Clouds | `Clouds.ts`, `cloudParams.ts`, `cloudChunk` | Procedural layer at 3,200 m; the same density function shades clouds and casts shadows on terrain |
 | Atmosphere | `shaders/chunks.ts`, `Sky.ts`, `atmosphereParams.ts` | Rayleigh + Mie single scattering, 8 view samples, 4 sun samples; shared by sky and terrain (aerial perspective) |
 | Plane | `Plane.ts` | Placeholder model and ribbon trails |
 | Landmarks | `Landmarks.ts` | Placeholders by kind, optional glTF, beams, CSS2D labels near the camera |

@@ -57,6 +57,7 @@ button, select { font: inherit; }
 .row span { color: var(--ink-dim); }
 .row b { font-variant-numeric: tabular-nums; font-weight: 600; }
 .warn { color: var(--warn); font-weight: 700; margin: 6px 0 0; }
+.streaming { color: var(--accent); font-size: 12px; margin: 6px 0 0; }
 
 .target + .target { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
 .target p { margin: 0; }

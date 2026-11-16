@@ -1,5 +1,5 @@
 {
- "bakedAt": "2026-11-16T01:18:11+00:00",
+ "bakedAt": "2026-11-16T02:17:01+00:00",
  "projection": "equirectangular; x: lon -180..180, y: lat 90..-90, pixel centres",
  "height": {
   "file": "height.png",
@@ -8,9 +8,20 @@
   "encoding": "terrarium",
   "decode": "elevation_m = R*256 + G + B/256 - 32768",
   "verticalDatum": "mean sea level",
-  "minM": -10334,
-  "maxM": 8892,
-  "source": "ETOPO1 Ice Surface, 10 arc-minute resample"
+  "minM": -10338,
+  "maxM": 7856,
+  "source": "ETOPO 2022 Ice Surface, 60 arc-second (ETOPO_2022_v1_60s_N90W180_surface.tif)"
+ },
+ "detail": {
+  "manifest": "tiles.json",
+  "width": 16384,
+  "height": 8192,
+  "tileSize": 256,
+  "level": 6,
+  "minM": -10676,
+  "maxM": 8874,
+  "sourceResolutionKm": 1.86,
+  "tiles": 1195
  },
  "surface": {
   "file": "surface.png",
@@ -34,56 +45,57 @@
   }
  },
  "stats": {
-  "lakes": 3743,
+  "lakes": 3791,
+  "peakSigmaKm": 6.0,
   "cities": 2000,
   "landmarks": 43,
   "peaks": [
    {
     "id": "matterhorn",
-    "before": 2467,
-    "after": 4474
+    "before": 3081,
+    "after": 4478
    },
    {
     "id": "kilimanjaro",
-    "before": 3445,
+    "before": 5163,
     "after": 5894
    },
    {
     "id": "table-mountain",
-    "before": 6,
+    "before": 510,
     "after": 1084
    },
    {
     "id": "everest",
-    "before": 5537,
+    "before": 7228,
     "after": 8847
    },
    {
     "id": "mount-fuji",
-    "before": 1198,
+    "before": 2815,
     "after": 3775
    },
    {
     "id": "mayon-volcano",
-    "before": 174,
-    "after": 2460
+    "before": 1188,
+    "after": 2461
    },
    {
     "id": "aconcagua",
-    "before": 4887,
-    "after": 6960
+    "before": 5594,
+    "after": 6959
    },
    {
     "id": "denali",
-    "before": 2576,
-    "after": 6188
+    "before": 5289,
+    "after": 6190
    }
   ]
  },
  "sources": [
   {
-   "name": "ETOPO1 Ice Surface, 10 arc-minute resample",
-   "by": "NOAA NCEI (via pyvista/vtk-data)",
+   "name": "ETOPO 2022 Ice Surface, 60 arc-second (ETOPO_2022_v1_60s_N90W180_surface.tif)",
+   "by": "NOAA NCEI",
    "licence": "Public domain (US Government)"
   },
   {

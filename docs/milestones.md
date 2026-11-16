@@ -7,8 +7,8 @@ The full game plan (eras, company, endgame, monetization) lives in the design do
 | --- | --- | --- |
 | **M0 Foundation** | Monorepo, Next.js shell, client-only game canvas, data pipeline | Done |
 | **M1 Flight on a real Earth** | Real elevation, coastlines, lakes, rivers; atmosphere; day/night; flyable plane; landmarks | Done (first pass) |
-| **M1.5 Sharper Earth** | High-resolution terrain near the plane, clouds | Next |
-| **M2 First delivery** | Letters, balloon marker, parachute drop, stamp, home airfield | Planned |
+| **M1.5 Sharper Earth** | High-resolution terrain near the plane, clouds | Done |
+| **M2 First delivery** | Letters, balloon marker, parachute drop, stamp, home airfield | Next |
 | **M3 Feel polish** | Sound, wind, Blender aircraft + first landmark models, settings, perf pass | Planned |
 | Gate | "Flying feels great": testers keep flying 5+ minutes unprompted | |
 
@@ -24,20 +24,23 @@ The full game plan (eras, company, endgame, monetization) lives in the design do
   - Placeholder mail plane with vapour trails; chase and globe cameras; landmark markers, beams and labels.
 - `apps/web`: landing page, `/play` with HUD (altitude, ground elevation, airspeed, compass, nearest landmark and city with direction arrows, local time), a "Fly to landmark" menu, and controls help.
 
+## M1.5: what shipped
+
+- Elevation source upgraded to **ETOPO 2022, 60 arc-second** (~1.9 km): 10× sharper than M1.
+- Bake works on a 16384 × 8192 grid and writes 1,195 lossless-WebP detail tiles (land and coasts only, 49 MB) plus the global base map.
+- **Terrain streaming**: a 45° × 45° detail window (2048² samples) follows the plane, assembled from cached tiles, blended into the base map in both the shaders and the CPU (`TerrainHeights`), so collision, HUD and rendering agree. A HUD note shows while a window loads.
+- Real summits restored with a gentler, non-overshooting blend (all eight within 2 m of their real heights).
+- Vertical exaggeration lowered from ×12 to ×8 now that slopes are resolved.
+- **Clouds**: procedural drifting layer at 3,200 m with climate-like latitude bands, sun-lit with self-shadowing, cloud shadows on the ground, dimming city lights; grazing views fade to avoid an edge-on white band.
+
 ## Known issues to pick up
 
-- Terrain detail is ~18 km per sample (see geodata.md). Fixed by M1.5.
-- WebGL 2 with GLSL shaders for now. The WebGPU/TSL port is scheduled for the M3 performance pass (decided for speed of iteration and widest compatibility).
-- Night lights are a proxy, not satellite imagery.
-- No clouds, weather or wind yet.
-- Not yet tested on mobile or touch.
-
-## M1.5: Sharper Earth (next)
-
-1. Swap the global base to ETOPO 2022 at 60″ (about 10× sharper), or 30″ if the download size is acceptable.
-2. Add terrain streaming: Terrarium tiles at zoom 8–11 around the plane, from our own bucket, feeding quadtree depths 6–9.
-3. A cloud layer: a global cloud-cover texture plus a raymarched or billboard layer at cruise altitude.
-4. A per-biome detail texture to replace the procedural noise.
+- Restored summits are smooth cones; regions like the Himalaya would benefit from ETOPO 2022 15″ tiles.
+- Clouds are a flat layer (no volume when flying through); the volumetric version comes with weather in a later milestone.
+- Arid plateaus (e.g. Colorado Plateau) read too pale; land colours need a red-rock or arid palette.
+- WebGL 2 / GLSL for now; the WebGPU/TSL port is planned for the M3 performance pass.
+- Not yet tested on mobile; the detail window uses ~16 MB of GPU memory as float32 (half-float on devices without float filtering).
+- Detail tiles are in git (49 MB); they move to object storage before launch.
 
 ## M2: First delivery
 
