@@ -19,6 +19,9 @@ versus stylized.
 | City lights | Natural Earth 1:10m `urban_areas` + `populated_places_simple` | vector + points | Public domain |
 | Cities | Natural Earth 1:10m `populated_places_simple` (top 2,000) | points | Public domain |
 | Land colour | **NASA Blue Marble: Next Generation**, base map without topography shading, one month (June preferred), 8 tiles `world.YYYYMM.3x21600x21600.{A-D}{1,2}.jpg` | 86400 × 43200, 500 m (baked to 8192 × 4096) | Public domain; credit NASA Earth Observatory |
+| Night lights | **NASA Black Marble 2016**, grayscale, 13500 × 6750 (3 km) | baked to 8192 × 4096 | Public domain |
+| Moon | **NASA SVS CGI Moon Kit**, `lroc_color_2k.jpg` | 1024 × 512 | Public domain |
+| Stars, Milky Way | **NASA SVS Deep Star Maps 2020**, `starmap_2020_8k.exr` (celestial coordinates) | 8192 × 4096 | Public domain |
 | Landmarks | Curated by hand: `tools/geo-pipeline/landmarks.source.json` | points | Ours |
 
 The ETOPO 2022 GeoTIFF (466 MB, SHA-256 `9d27d4b8…a7fd08e`) and the GEBCO_2026 grid (4.2 GB zip, from
@@ -46,6 +49,7 @@ All rasters are **equirectangular**: x = longitude −180° → +180°, y = lati
 | `coast.png` | 8192 × 4096 RGB | Signed distances, `km = (v − 128) × 0.5` (±64 km): R to the sea coast (positive at sea), G to a lake shore (positive on the lake). Draws smooth coastlines and drives surf lines, shallows and beaches. |
 | `color.webp` | 8192 × 4096 sRGB | Satellite true colour (Blue Marble), graded in the terrain shader (`uSatGrade`: brightness, saturation, contrast) |
 | `places.png` + `places.json` | 4096 × 2048 RGB | Country and sea IDs for "where am I" (`bake_places.py`, from Natural Earth admin-0 countries and marine areas) |
+| `lights.webp`, `moon.jpg`, `stars.webp` | see `bake_sky.py` | Night lights, moon albedo, star field (u = 0.5 − RA/360°, v = 0.5 − Dec/180°) |
 | `extras.png` | 4096 × 2048 RGB | R city lights, G desert, B reserved (named "extras", not "aux": `aux` is a reserved file name on Windows) |
 | `cities.json` | 2,000 entries | name, country, lat/lon, population, capital flag, elevation |
 | `landmarks.json` | 43 entries | landmark data plus ground elevation sampled from the DEM |
@@ -138,6 +142,7 @@ pnpm geo:bake     # writes apps/web/public/geo/* (about 2.5 minutes, ~3 GB RAM)
 # satellite colour: put the 8 Blue Marble tiles in a folder, then
 python3 tools/geo-pipeline/bake_color.py --bmng <that folder>     # ~1 minute; also refreshes coast.png
 # (pnpm geo:bake also runs bake_places.py: country and sea lookup for the HUD)
+# sky: python3 tools/geo-pipeline/bake_sky.py --lights BlackMarble_2016_3km_gray.jpg --moon lroc_color_2k.jpg --stars starmap_2020_8k.exr
 # fine tiles: unzip the GEBCO_2026 GeoTIFFs into a folder, then
 python3 tools/geo-pipeline/bake_detail.py --gebco <that folder>   # ~1.5 minutes, reads with memory maps
 ```

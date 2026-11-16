@@ -220,7 +220,7 @@ function Debug({ hud, engine }: { hud: HudState; engine: Engine }) {
       <p className="row"><span>Altitude</span><b>{nf.format(t.altitudeM)} m</b></p>
       <p className="row"><span>Ground</span><b>{nf.format(t.groundM)} m</b></p>
       <p className="row"><span>Airspeed</span><b>{nf.format(t.airspeedKmh)} km/h</b></p>
-      <p className="row"><span>Local time</span><b>{hud.localTime}{hud.timeScale !== 60 ? ` (×${hud.timeScale / 60})` : ""}</b></p>
+      <p className="row"><span>Local time</span><b>{hud.localTime}{hud.timeScale !== 72 ? ` (×${Math.round((hud.timeScale / 72) * 100) / 100})` : ""}</b></p>
       <p className="row"><span>Render</span><b>{hud.fps} fps · {Math.round(hud.renderScale * 100)}% res · {hud.chunks} chunks</b></p>
       <p className="row"><span>Terrain</span><b>{hud.streaming ? "streaming…" : "ready"}</b></p>
       {hud.target && (

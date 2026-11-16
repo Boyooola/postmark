@@ -62,7 +62,9 @@ ${noiseChunk}
 ${atmosphereChunk}
 ${cloudChunk}
 uniform sampler2D uSurface;
-uniform sampler2D uAux;
+uniform sampler2D uAux;       // R = night lights (Black Marble, sRGB-encoded)
+uniform vec3 uMoonDir;
+uniform float uMoonPhase;     // illuminated fraction 0..1
 uniform sampler2D uColor;     // satellite true colour, sRGB
 uniform vec3 uSatGrade;       // brightness, saturation, contrast of the satellite colour
 uniform sampler2D uCoast;     // signed km to the sea coast: (v*255 - 128) * 0.5, > 0 at sea
@@ -298,7 +300,10 @@ void main() {
   // Sky light from above (less in deep gullies), plus a little bounce.
   float ao = mix(0.55, 1.0, clamp(ridgeV * 1.6, 0.0, 1.0)) * (1.0 - water) + water;
   vec3 skyAmb = uAmbient * vec3(0.12, 0.14, 0.18) * (0.55 + 0.45 * dot(n, dir)) * day * ao;
-  vec3 col = albedo * (sunCol * ndl + skyAmb + vec3(0.006, 0.008, 0.012));
+  // Moonlight: a faint cool light from the moon's direction, scaled by its phase.
+  float moonUp = max(dot(n, uMoonDir), 0.0) * smoothstep(-0.05, 0.1, dot(dir, uMoonDir));
+  vec3 moonLight = vec3(0.05, 0.065, 0.095) * uMoonPhase * moonUp * (1.0 - day);
+  vec3 col = albedo * (sunCol * ndl + skyAmb + moonLight + vec3(0.007, 0.009, 0.014));
 
   // Water: sun glitter on the waves and a sky reflection that grows at grazing angles.
   vec3 Hh = normalize(uSunDir + V);
@@ -309,15 +314,19 @@ void main() {
   col += water * (1.0 - foam) * (sunCol * glitter * shadow + skyRefl * fres * 0.5);
 
   // ------------------------------------------------ city lights
-  float night = 1.0 - smoothstep(-0.12, 0.08, dot(dir, uSunDir));
-  float density = aux.r;
-  float glow = pow(density, 2.4) * 0.6;
-  vec3 cell = floor(dir * 26000.0);
-  float pts = step(1.0 - density * density * 0.09, hash13(cell)) * (0.6 + 0.8 * hash13(cell + 7.0));
-  float near = 1.0 - smoothstep(4.0, 40.0, camDist);
-  float lights = mix(glow, pts * 1.4 + glow * 0.05, near);
-  lights *= mix(1.0, 0.12, smoothstep(350.0, 1200.0, h)) * (1.0 - 0.8 * smoothstep(0.2, 0.55, slope));
-  col += lights * vec3(1.0, 0.72, 0.38) * night * uNightLights * (1.0 - water * 0.9) * (1.0 - 0.6 * cloudHere);
+  // Real night lights (NASA Black Marble 2016). Warm sodium orange at the edges,
+  // whiter in bright centres; up close the ~5 km texture is broken into points so
+  // towns read as clusters of lights. They switch on through dusk.
+  float night = 1.0 - smoothstep(-0.10, 0.05, dot(dir, uSunDir));
+  float lightsV = aux.r;
+  // City cores saturate the source image; a steep curve keeps them bright but
+  // lets the suburbs and towns fall off, so lights read as points, not blobs.
+  float rad = pow(lightsV, 2.8) * 0.32;
+  float near = 1.0 - smoothstep(4.0, 30.0, camDist);
+  vec3 cell = floor(dir * 24000.0);
+  float sparkle = mix(1.0, 0.25 + 1.5 * hash13(cell), near);
+  vec3 lightCol = mix(vec3(1.0, 0.58, 0.24), vec3(1.0, 0.85, 0.62), smoothstep(0.35, 0.85, lightsV));
+  col += lightCol * rad * sparkle * night * uNightLights * (1.0 - water * 0.95) * (1.0 - 0.6 * cloudHere);
 
   // ------------------------------------------------ aerial perspective
   col = col * mix(vec3(1.0), vTransmit, uHaze) + vInscatter * uInscatter;

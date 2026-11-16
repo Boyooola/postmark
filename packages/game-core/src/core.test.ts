@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   Places,
+  gmstDeg,
+  julianDate,
+  moonIllumination,
+  moonRaDec,
+  subPoint,
+  sunRaDec,
   FLIGHT,
   FlightModel,
   HeightField,
@@ -249,5 +255,31 @@ describe("Places", () => {
   it("wraps longitude and clamps the poles", () => {
     expect(p.at({ lat: 90, lon: 460 })).toBe("North Sea"); // 460 = 100 E
     expect(p.at({ lat: -90, lon: -180 })).toBe("Westland");
+  });
+});
+
+describe("astro", () => {
+  const jd = (iso: string) => julianDate(Date.parse(iso));
+
+  it("puts the sun at the solstice and equinox declinations", () => {
+    expect(sunRaDec(jd("2024-06-20T20:51:00Z")).decDeg).toBeCloseTo(23.44, 1);
+    expect(Math.abs(sunRaDec(jd("2024-03-20T03:06:00Z")).decDeg)).toBeLessThan(0.05);
+  });
+
+  it("puts noon over Greenwich (allowing for the equation of time)", () => {
+    // March 20: the sun crosses Greenwich ~7.5 min after 12:00 UTC, so at 12:00 it is ~1.9 deg east.
+    const j = jd("2024-03-20T12:00:00Z");
+    expect(subPoint(sunRaDec(j), j).lon).toBeCloseTo(1.9, 0);
+  });
+
+  it("knows new and full moons", () => {
+    expect(moonIllumination(jd("2024-04-23T23:49:00Z"))).toBeGreaterThan(0.99);
+    const j = jd("2024-04-08T18:21:00Z"); // new moon (total solar eclipse)
+    expect(moonIllumination(j)).toBeLessThan(0.01);
+    expect(Math.abs(moonRaDec(j).raDeg - sunRaDec(j).raDeg)).toBeLessThan(1.5);
+  });
+
+  it("computes sidereal time", () => {
+    expect(gmstDeg(2_451_545.0)).toBeCloseTo(280.46, 2);
   });
 });

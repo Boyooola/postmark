@@ -124,6 +124,8 @@ export class TerrainLOD {
         uHeight: { value: tex.height },
         uSurface: { value: tex.surface },
         uAux: { value: tex.aux },
+        uMoonDir: { value: new Vector3(0, 1, 0) },
+        uMoonPhase: { value: 0 },
         uColor: { value: tex.color },
         uSatGrade: { value: new Vector3(0.62, 0.8, 1.08) }, // brightness, saturation, contrast
         uCoast: { value: tex.coast },

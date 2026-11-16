@@ -15,6 +15,11 @@ import {
 import {
   Deliveries,
   FLIGHT,
+  gmstDeg,
+  julianDate,
+  moonIllumination,
+  moonRaDec,
+  sunRaDec,
   FlightModel,
   TerrainHeights,
   bearingDeg,
@@ -85,7 +90,9 @@ const CAMERA = { back: 3.0, up: 2.3, lookAhead: 2.6, lookUp: -1.2, fov: 62, boos
 const PLANE_SCALE = 2.5;
 
 const DEFAULT_START = { lat: 47.2, lon: 6.6, headingDeg: 140, altitudeM: FLIGHT.cruiseAltitudeM, utcHours: 14.6 };
-const SUN_DECLINATION_DEG = 12;
+/** One full day takes 20 real minutes. */
+const DAY_TIME_SCALE = 72;
+const DAY_MS = 86_400_000;
 
 export class Engine {
   readonly renderer: WebGLRenderer;
@@ -118,8 +125,18 @@ export class Engine {
   private sunLight = new DirectionalLight(0xffffff, 3);
   private hemi = new HemisphereLight(0xbfd8ff, 0x3a3020, 0.6);
 
-  private utcHours = DEFAULT_START.utcHours;
-  timeScale = 60; // game seconds per real second (1 day = 24 min)
+  /** Game clock, ms since the Unix epoch (UTC): today's real date, advancing 72x. */
+  private simMs = Math.floor(Date.now() / DAY_MS) * DAY_MS + DEFAULT_START.utcHours * 3_600_000;
+  private get utcHours() {
+    return (((this.simMs % DAY_MS) + DAY_MS) % DAY_MS) / 3_600_000;
+  }
+  private set utcHours(h: number) {
+    this.simMs = Math.floor(this.simMs / DAY_MS) * DAY_MS + h * 3_600_000;
+  }
+  private moonDir = new Vector3(0, 0, 1);
+  private moonPhase = 0;
+  private gmstRad = 0;
+  timeScale = DAY_TIME_SCALE; // game seconds per real second (1 day = 20 min)
   private lastSpawn: { lat: number; lon: number; headingDeg: number; altitudeM: number; utcHours: number } = { ...DEFAULT_START };
   private hudTimer = 0;
   private frames = 0;
@@ -208,7 +225,7 @@ export class Engine {
       atmo,
       this.cloudUniforms,
     );
-    this.sky = new Sky(atmo);
+    this.sky = new Sky(atmo, opts.assetBase);
     this.clouds = new Clouds(atmo, this.cloudUniforms);
     this.clouds.mesh.visible = this.cloudUniforms.uCloudCover.value > 0;
     this.flight = new FlightModel(surface);
@@ -307,6 +324,22 @@ export class Engine {
     if (this.clouds) this.clouds.mesh.visible = this.cloudUniforms.uCloudCover.value > 0;
   }
 
+  /** Testing: aim the camera along a world direction, or follow the moon or sun (null = normal chase camera). */
+  debugLook(dir: Vector3 | "moon" | "sun" | null) {
+    this.lookOverride = dir instanceof Vector3 ? dir.clone().normalize() : dir;
+  }
+  private lookOverride: Vector3 | "moon" | "sun" | null = null;
+
+  /** Testing: unit vector towards the moon. */
+  get moonDirection(): Vector3 {
+    return this.moonDir;
+  }
+
+  /** Testing: set the game clock to a date (ISO string or ms). */
+  setDate(when: string | number) {
+    this.simMs = typeof when === "number" ? when : Date.parse(when);
+  }
+
   setPaused(p: boolean) {
     this.paused = p;
   }
@@ -320,7 +353,7 @@ export class Engine {
 
   private handleAction(a: ActionKey) {
     if (a === "drop") this.dropParcel();
-    if (a === "timeFaster") this.setTimeScale(this.timeScale === 0 ? 60 : this.timeScale * 4);
+    if (a === "timeFaster") this.setTimeScale(this.timeScale === 0 ? DAY_TIME_SCALE : this.timeScale * 4);
     if (a === "timeSlower") this.setTimeScale(this.timeScale <= 15 ? 0 : this.timeScale / 4);
     if (a === "respawn") {
       this.spawn(this.lastSpawn.lat, this.lastSpawn.lon, this.lastSpawn.headingDeg, this.lastSpawn.altitudeM);
@@ -337,8 +370,8 @@ export class Engine {
     const dt = Math.min(this.timer.getDelta(), 0.1);
     const t = this.timer.getElapsed();
     if (!this.paused) {
-      this.utcHours = (this.utcHours + (dt * this.timeScale) / 3600 + 24) % 24;
-      this.cloudUniforms.uCloudTime.value += dt * Math.max(1, this.timeScale / 60);
+      this.simMs += dt * this.timeScale * 1000;
+      this.cloudUniforms.uCloudTime.value += dt * Math.max(1, this.timeScale / DAY_TIME_SCALE);
       this.flight.update(dt, this.input.read(dt));
       this.parcels.update(dt);
       this.runTime += dt;
@@ -352,10 +385,14 @@ export class Engine {
     this.updateSun();
     this.updatePlane(t);
     this.updateChaseCamera(dt);
+    if (this.lookOverride) {
+      const d = this.lookOverride === "moon" ? this.moonDir : this.lookOverride === "sun" ? this.sun : this.lookOverride;
+      this.camera.lookAt(this.camera.position.clone().addScaledVector(d, 100));
+    }
 
     this.terrain.setFrame(t, this.renderer.domElement.height, this.camera);
     this.terrain.update(this.camera);
-    this.sky.update(this.camera.position, this.sun);
+    this.sky.update(this.camera.position, this.sun, this.moonDir, this.gmstRad, t, this.moonPhase);
     this.clouds.update(this.camera.position);
     this.balloons.update(this.camera.position, t);
     this.bendProps();
@@ -395,8 +432,19 @@ export class Engine {
   }
 
   private updateSun() {
-    const subsolarLon = (12 - this.utcHours) * 15;
-    latLonToDirection(SUN_DECLINATION_DEG, subsolarLon, this.sun);
+    // Real sun and moon positions for the game clock (seasons included).
+    const jd = julianDate(this.simMs);
+    const g = gmstDeg(jd);
+    const sp = sunRaDec(jd), mp = moonRaDec(jd);
+    latLonToDirection(sp.decDeg, sp.raDeg - g, this.sun);
+    latLonToDirection(mp.decDeg, mp.raDeg - g, this.moonDir);
+    this.moonPhase = moonIllumination(jd);
+    this.gmstRad = (g * Math.PI) / 180;
+    if (this.terrain) {
+      const u = this.terrain.material.uniforms;
+      (u.uMoonDir.value as Vector3).copy(this.moonDir);
+      u.uMoonPhase.value = this.moonPhase;
+    }
     this.sunLight.position.copy(this.flight?.position ?? new Vector3()).addScaledVector(this.sun, 50);
     this.sunLight.target.position.copy(this.flight?.position ?? new Vector3());
     const up = this.flight ? this.flight.position.clone().normalize() : new Vector3(0, 1, 0);
