@@ -133,6 +133,11 @@
    "name": "Deep Star Maps 2020",
    "by": "NASA Goddard Scientific Visualization Studio",
    "licence": "Public domain (US Government)"
+  },
+  {
+   "name": "Copernicus DEM GLO-90",
+   "by": "ESA / Copernicus Programme (via AWS Open Data)",
+   "licence": "Free to use with attribution (Copernicus DEM licence)"
   }
  ],
  "detail8": {
@@ -198,5 +203,10 @@
    "height": 4096,
    "projection": "celestial, RA 0 at centre increasing left"
   }
+ },
+ "detail10": {
+  "manifest": "tiles-10.json",
+  "tiles": 10278,
+  "metresPerPixel": 153
  }
 }

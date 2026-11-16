@@ -89,7 +89,7 @@ export interface EngineOptions {
 const CAMERA = { back: 3.0, up: 2.3, lookAhead: 2.6, lookUp: -1.2, fov: 62, boostFov: 74 };
 const PLANE_SCALE = 2.5;
 
-const DEFAULT_START = { lat: 47.2, lon: 6.6, headingDeg: 140, altitudeM: FLIGHT.cruiseAltitudeM, utcHours: 14.6 };
+const DEFAULT_START = { lat: 47.2, lon: 6.6, headingDeg: 140, altitudeM: FLIGHT.cruiseAltitudeM, utcHours: 12.4 };
 /** One full day takes 20 real minutes. */
 const DAY_TIME_SCALE = 72;
 const DAY_MS = 86_400_000;
@@ -108,6 +108,7 @@ export class Engine {
   private heights!: TerrainHeights;
   private detail: DetailTerrain | null = null;
   private fine: DetailTerrain | null = null;
+  private sharp: DetailTerrain | null = null;
   private sky!: Sky;
   private clouds!: Clouds;
   private cloudUniforms = createCloudUniforms();
@@ -211,12 +212,31 @@ export class Engine {
         true,
       );
     }
+    if (this.assets.tilesSharp) {
+      // ~150 m terrain over high mountains (Copernicus GLO-90); off elsewhere.
+      this.sharp = new DetailTerrain(
+        opts.assetBase,
+        this.assets.tilesSharp,
+        this.heights,
+        this.assets.floatLinear,
+        (w) => {
+          this.terrain?.setSharpWindow(w);
+          // A finer mesh near the camera only pays off where the sharp data is.
+          if (w) this.terrain?.setMeshDetail(10, 2.6);
+          else this.terrain?.setMeshDetail(8, 2.2);
+        },
+        (lat, lon) => this.heights.sample(lat, lon, 2),
+        (w) => (this.heights.sharp = w),
+        true,
+      );
+    }
     this.terrain = new TerrainLOD(
       {
         height: this.assets.heightTexture,
         heightSize: this.assets.heights,
         detail: this.detail?.texture ?? this.assets.heightTexture,
         fine: this.fine?.texture ?? this.assets.heightTexture,
+        sharp: this.sharp?.texture ?? this.assets.heightTexture,
         surface: this.assets.surfaceTexture,
         aux: this.assets.auxTexture,
         color: this.assets.colorTexture,
@@ -249,6 +269,10 @@ export class Engine {
         const d8 = this.assets.tilesFine!.degreesPerTile;
         await this.fine.load((s.lon + 180) / d8, (90 - s.lat) / d8);
       }
+      if (this.sharp) {
+        const d10 = this.assets.tilesSharp!.degreesPerTile;
+        await this.sharp.load((s.lon + 180) / d10, (90 - s.lat) / d10);
+      }
       if (this.disposed) return;
     }
     this.spawn(s.lat, s.lon, s.headingDeg, s.altitudeM);
@@ -276,7 +300,7 @@ export class Engine {
 
   /** True while a new high-resolution terrain window is loading. */
   get streaming(): boolean {
-    return (this.detail?.loading ?? false) || (this.fine?.loading ?? false);
+    return (this.detail?.loading ?? false) || (this.fine?.loading ?? false) || (this.sharp?.loading ?? false);
   }
 
   // ------------------------------------------------------------------ actions
@@ -286,6 +310,7 @@ export class Engine {
     this.trails.forEach((t) => t.reset());
     this.detail?.update(lat, lon, true);
     this.fine?.update(lat, lon, true);
+    this.sharp?.update(lat, lon, true);
   }
 
   /** Developer shortcut: jump to ~250 km south of the open destination, facing it. */
@@ -381,6 +406,7 @@ export class Engine {
       this.detail.update(p.lat, p.lon);
       // The fine window waits for the detail window it falls back on.
       if (!this.detail.loading) this.fine?.update(p.lat, p.lon);
+      if (!this.detail.loading && !this.fine?.loading) this.sharp?.update(p.lat, p.lon);
     }
     this.updateSun();
     this.updatePlane(t);
@@ -587,6 +613,7 @@ export class Engine {
     this.terrain?.dispose();
     this.detail?.dispose();
     this.fine?.dispose();
+    this.sharp?.dispose();
     this.sky?.dispose();
     this.clouds?.dispose();
     this.assets?.heightTexture.dispose();

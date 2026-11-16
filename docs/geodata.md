@@ -10,6 +10,7 @@ versus stylized.
 | --- | --- | --- | --- |
 | Elevation + ocean depth | **ETOPO 2022 Ice Surface, 60 arc-second** (NOAA NCEI), `ETOPO_2022_v1_60s_N90W180_surface.tif` | 21600 × 10800, ~1.9 km at the equator | Public domain (US Government) |
 | Fine elevation (selected regions) | **GEBCO_2026 Grid, ice surface, 15 arc-second** (8 GeoTIFF tiles of 90° × 90°) | 86400 × 43200, ~450 m | Free to use with acknowledgement (GEBCO terms of use) |
+| Sharp elevation (high mountains) | **Copernicus DEM GLO-90** (1° × 1° tiles, 3 arc-seconds), fetched with `tools/geo-pipeline/fetch_copdem90.ps1` | ~90 m, baked to ~153 m (level 10) | Free with attribution (Copernicus DEM licence) |
 | Elevation fallback | ETOPO1 Ice Surface, 10 arc-minute resample (`pyvista/vtk-data`) | ~18.5 km | Public domain |
 | Coastlines / land | Natural Earth 1:10m `land` + `minor_islands` | vector | Public domain |
 | Lakes | Natural Earth 1:10m `lakes`, `lakes_europe`, `lakes_north_america` | vector | Public domain |
@@ -95,7 +96,8 @@ Add a mountain to `landmarks.source.json` with `summitM` and re-bake to restore 
 - **Base map:** decoded once into a `Float32Array` (`HeightField`) and a float texture.
 - **Detail window (level 6):** `DetailTerrain` assembles 8 × 8 tiles (45° × 45°, 2048 × 2048 samples) around the plane into one float texture. It re-centres when the plane is 1.75 tiles from the centre; the old window stays live while the new one loads, and decoded tiles are cached (192 tiles).
 - **Fine window (level 8):** a second `DetailTerrain` does the same with level-8 tiles (8 × 8 tiles = 11.25°). Where no fine tile exists it fills from the level-6 data, and it switches itself off entirely when no fine tiles are near the plane.
-- **Blending:** `TerrainHeights` (game-core, CPU) and `heightAt()` (GLSL) both return base → detail → fine, each fading in over the outer 6% of its window. Collision, landmark placement and rendering always agree.
+- **Sharp window (level 10):** a third `DetailTerrain` (8 × 8 tiles = 2.8°, ~153 m) over 13 mountain regions, only for tiles with ≥ 500 m of relief; gaps are filled from level 8/6. While it is active the terrain mesh refines two levels deeper near the camera.
+- **Blending:** `TerrainHeights` (game-core, CPU) and `heightAt()` (GLSL) both return base → detail → fine → sharp, each fading in over the outer 6% of its window. Collision, landmark placement and rendering always agree.
 
 ## World scale (game-core `constants.ts`)
 
@@ -145,4 +147,6 @@ python3 tools/geo-pipeline/bake_color.py --bmng <that folder>     # ~1 minute; a
 # sky: python3 tools/geo-pipeline/bake_sky.py --lights BlackMarble_2016_3km_gray.jpg --moon lroc_color_2k.jpg --stars starmap_2020_8k.exr
 # fine tiles: unzip the GEBCO_2026 GeoTIFFs into a folder, then
 python3 tools/geo-pipeline/bake_detail.py --gebco <that folder>   # ~1.5 minutes, reads with memory maps
+# sharp mountains: run tools/geo-pipeline/fetch_copdem90.ps1 (Windows) for the Copernicus tiles, then
+python3 tools/geo-pipeline/bake_detail10.py --copdem <copdem90 folder> --gebco <gebco folder>
 ```

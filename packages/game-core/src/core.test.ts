@@ -231,6 +231,9 @@ describe("TerrainHeights fine window", () => {
     expect(t.sample(10, 10, 1)).toBeCloseTo(500); // fine excluded
     expect(t.sample(18, 2)).toBeCloseTo(500); // detail only
     expect(t.sample(-30, -60)).toBeCloseTo(100); // base only
+    t.sharp = { data: new Float32Array(16 * 16).fill(1500), size: 16, lon0: 8, lat0: 12, spanDeg: 4 };
+    expect(t.sample(10, 10)).toBeCloseTo(1500); // inside sharp
+    expect(t.sample(10, 10, 2)).toBeCloseTo(900); // sharp excluded
   });
 });
 

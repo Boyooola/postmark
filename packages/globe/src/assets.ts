@@ -37,6 +37,8 @@ export interface GeoAssets {
   tiles: TileManifest | null;
   /** fine (~610 m) tiles for selected regions */
   tilesFine: TileManifest | null;
+  /** sharp (~150 m) tiles over high mountains */
+  tilesSharp: TileManifest | null;
   floatLinear: boolean;
 }
 
@@ -80,12 +82,13 @@ function colourTexture(bmp: ImageBitmap): Texture {
 export async function loadGeoAssets(base: string, renderer: WebGLRenderer, progress: Progress = () => {}): Promise<GeoAssets> {
   const maxTex = renderer.capabilities.maxTextureSize;
   progress("Reading the atlas", 0.02);
-  const [meta, placeNames, cities, tiles, tilesFine] = await Promise.all([
+  const [meta, placeNames, cities, tiles, tilesFine, tilesSharp] = await Promise.all([
     fetch(`${base}/meta.json`).then((r) => r.json() as Promise<GeoMeta>),
     fetch(`${base}/places.json`).then((r) => r.json() as Promise<{ countries: string[]; seas: string[] }>),
     fetch(`${base}/cities.json`).then((r) => r.json()).then((j) => j.cities as City[]),
     fetch(`${base}/tiles.json`).then((r) => (r.ok ? (r.json() as Promise<TileManifest>) : null)).catch(() => null),
     fetch(`${base}/tiles-8.json`).then((r) => (r.ok ? (r.json() as Promise<TileManifest>) : null)).catch(() => null),
+    fetch(`${base}/tiles-10.json`).then((r) => (r.ok ? (r.json() as Promise<TileManifest>) : null)).catch(() => null),
   ]);
 
   progress("Loading elevation data", 0.1);
@@ -131,6 +134,7 @@ export async function loadGeoAssets(base: string, renderer: WebGLRenderer, progr
     cities,
     tiles,
     tilesFine,
+    tilesSharp,
     floatLinear,
   };
 }

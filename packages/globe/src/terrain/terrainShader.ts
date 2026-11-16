@@ -68,7 +68,7 @@ uniform float uMoonPhase;     // illuminated fraction 0..1
 uniform sampler2D uColor;     // satellite true colour, sRGB
 uniform vec3 uSatGrade;       // brightness, saturation, contrast of the satellite colour
 uniform sampler2D uCoast;     // signed km to the sea coast: (v*255 - 128) * 0.5, > 0 at sea
-uniform vec3 uStepRad;        // angular sample step: base map, detail window, fine window
+uniform vec4 uStepRad;        // angular sample step: base map, detail, fine, sharp windows
 uniform float uElevScale;
 uniform vec3 uCamPos;
 uniform float uHaze;
@@ -182,7 +182,9 @@ void main() {
   // local east/north great circles, one texel apart).
   vec2 hw = heightAtLL(ll);
   float h = hw.x;
-  float stp = hw.y > 1.5 ? uStepRad.z : (hw.y > 0.5 ? uStepRad.y : uStepRad.x);
+  float stp = hw.y > 2.5 ? uStepRad.w : (hw.y > 1.5 ? uStepRad.z : (hw.y > 0.5 ? uStepRad.y : uStepRad.x));
+  // Never step finer than a screen pixel: keeps sharp data from shimmering far away.
+  stp = max(stp, pix / uRadius * 0.75);
   // Neighbours along the local east/north great circles, in lat/lon directly
   // (no per-tap trigonometry).
   float dLon = stp / max(cos(ll.x), 0.02);
@@ -215,7 +217,7 @@ void main() {
   vec3 wp = dir * uRadius;
   float mountain = clamp(smoothstep(300.0, 2500.0, h) * 0.8 + smoothstep(0.06, 0.45, slope) * 0.7, 0.0, 1.0);
   // Less synthetic relief where real ~610 m data is present (level 2).
-  float reliefM = (50.0 + 430.0 * mountain) * uRelief * (1.0 - water) * (hw.y > 1.5 ? 0.4 : 1.0);
+  float reliefM = (50.0 + 430.0 * mountain) * uRelief * (1.0 - water) * (hw.y > 2.5 ? 0.12 : (hw.y > 1.5 ? 0.4 : 1.0));
   float e0 = 0.0, ridgeV = 0.0;
   if (reliefM > 1.0 && pix < 0.6) {
     float de = max(pix * 1.5, 0.02);

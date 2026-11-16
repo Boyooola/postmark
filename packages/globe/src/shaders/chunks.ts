@@ -144,6 +144,8 @@ uniform sampler2D uDetail;   // level-6 window (~2.4 km), metres
 uniform vec4 uDetailRect;    // lon0 deg, lat0 deg, span deg, enabled (0/1)
 uniform sampler2D uFine;     // level-8 window (~610 m), metres, mountain regions only
 uniform vec4 uFineRect;
+uniform sampler2D uSharp;  // level-10 window (~150 m), high mountains only
+uniform vec4 uSharpRect;
 uniform float uDetailFade;
 // Blend weight and texture coords of a window at (lon, lat) in degrees.
 vec3 windowAt(vec4 rect, float lonDeg, float latDeg) {
@@ -155,7 +157,7 @@ vec3 windowAt(vec4 rect, float lonDeg, float latDeg) {
   return vec3(du, dv, smoothstep(0.0, uDetailFade, edge));
 }
 // Elevation in metres: base, then the detail window, then the fine window.
-// Returns (height, level) with level 0 = base, 1 = detail, 2 = fine.
+// Returns (height, level) with level 0 = base, 1 = detail, 2 = fine, 3 = sharp.
 // Must match TerrainHeights.sample() in game-core.
 vec2 heightAtLL(vec2 ll) {
   vec2 uv = vec2(ll.y / (2.0 * PI) + 0.5, 0.5 - ll.x / PI);
@@ -166,6 +168,8 @@ vec2 heightAtLL(vec2 ll) {
   if (a.z > 0.0) { h = mix(h, textureLod(uDetail, a.xy, 0.0).r, a.z); level = a.z > 0.5 ? 1.0 : 0.0; }
   vec3 b = windowAt(uFineRect, lonDeg, latDeg);
   if (b.z > 0.0) { h = mix(h, textureLod(uFine, b.xy, 0.0).r, b.z); level = b.z > 0.5 ? 2.0 : level; }
+  vec3 c = windowAt(uSharpRect, lonDeg, latDeg);
+  if (c.z > 0.0) { h = mix(h, textureLod(uSharp, c.xy, 0.0).r, c.z); level = c.z > 0.5 ? 3.0 : level; }
   return vec2(h, level);
 }
 vec2 heightAt(vec3 dir) { return heightAtLL(dirToLatLon(dir)); }

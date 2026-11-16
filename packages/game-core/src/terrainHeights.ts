@@ -55,6 +55,8 @@ export class TerrainHeights {
   detail: DetailWindow | null = null;
   /** level-8 window (~610 m), only where fine tiles exist */
   fine: DetailWindow | null = null;
+  /** level-10 window (~150 m), only over high mountains */
+  sharp: DetailWindow | null = null;
 
   constructor(readonly base: HeightField) {}
 
@@ -63,8 +65,8 @@ export class TerrainHeights {
     return windowCoords(this.detail, lat, lon);
   }
 
-  /** Elevation in metres (negative = ocean depth), using data up to `maxLevel` (0 base, 1 detail, 2 fine). */
-  sample(lat: number, lon: number, maxLevel = 2): number {
+  /** Elevation in metres (negative = ocean depth), using data up to `maxLevel` (0 base, 1 detail, 2 fine, 3 sharp). */
+  sample(lat: number, lon: number, maxLevel = 3): number {
     let h = this.base.sample(lat, lon);
     if (maxLevel >= 1) {
       const c = windowCoords(this.detail, lat, lon);
@@ -73,6 +75,10 @@ export class TerrainHeights {
     if (maxLevel >= 2) {
       const c = windowCoords(this.fine, lat, lon);
       if (c && c.weight > 0) h += (sampleWindow(this.fine!, c.du, c.dv) - h) * c.weight;
+    }
+    if (maxLevel >= 3) {
+      const c = windowCoords(this.sharp, lat, lon);
+      if (c && c.weight > 0) h += (sampleWindow(this.sharp!, c.du, c.dv) - h) * c.weight;
     }
     return h;
   }

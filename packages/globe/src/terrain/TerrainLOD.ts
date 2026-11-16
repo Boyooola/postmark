@@ -37,6 +37,7 @@ export interface TerrainTextures {
   heightSize: { width: number; height: number };
   detail: Texture;
   fine: Texture;
+  sharp: Texture;
   surface: Texture;
   aux: Texture;
   color: Texture;
@@ -138,8 +139,10 @@ export class TerrainLOD {
         uDetailRect: { value: new Vector4(0, 0, 1, 0) },
         uFine: { value: tex.fine },
         uFineRect: { value: new Vector4(0, 0, 1, 0) },
+        uSharp: { value: tex.sharp },
+        uSharpRect: { value: new Vector4(0, 0, 1, 0) },
         uDetailFade: { value: DETAIL_EDGE_FADE },
-        uStepRad: { value: new Vector3((2 * Math.PI) / tex.heightSize.width, 0.001, 0.0002) },
+        uStepRad: { value: new Vector4((2 * Math.PI) / tex.heightSize.width, 0.001, 0.0002, 0.00005) },
         uElevScale: { value: elevationToUnits(1) },
         uSkirt: { value: 0.02 * WORLD_RADIUS },
         uCamPos: { value: new Vector3() },
@@ -155,7 +158,7 @@ export class TerrainLOD {
   /** Point the shaders at a newly loaded detail window. */
   setDetailWindow(w: DetailWindow) {
     (this.material.uniforms.uDetailRect.value as Vector4).set(w.lon0, w.lat0, w.spanDeg, 1);
-    (this.material.uniforms.uStepRad.value as Vector3).y = ((w.spanDeg / w.size) * Math.PI) / 180;
+    (this.material.uniforms.uStepRad.value as Vector4).y = ((w.spanDeg / w.size) * Math.PI) / 180;
   }
 
   /** The fine (~610 m) window; null turns it off (no fine data near the plane). */
@@ -163,7 +166,21 @@ export class TerrainLOD {
     const r = this.material.uniforms.uFineRect.value as Vector4;
     if (!w) return void r.setW(0);
     r.set(w.lon0, w.lat0, w.spanDeg, 1);
-    (this.material.uniforms.uStepRad.value as Vector3).z = ((w.spanDeg / w.size) * Math.PI) / 180;
+    (this.material.uniforms.uStepRad.value as Vector4).z = ((w.spanDeg / w.size) * Math.PI) / 180;
+  }
+
+  /** Mesh refinement: deepest quadtree level and split distance (in chunk edge lengths). */
+  setMeshDetail(maxDepth: number, splitFactor: number) {
+    this.maxDepth = maxDepth;
+    this.splitFactor = splitFactor;
+  }
+
+  /** The sharp (~150 m) window; null turns it off (no sharp data near the plane). */
+  setSharpWindow(w: DetailWindow | null) {
+    const r = this.material.uniforms.uSharpRect.value as Vector4;
+    if (!w) return void r.setW(0);
+    r.set(w.lon0, w.lat0, w.spanDeg, 1);
+    (this.material.uniforms.uStepRad.value as Vector4).w = ((w.spanDeg / w.size) * Math.PI) / 180;
   }
 
   /** Per-frame values: animation time and the size of a screen pixel (for anti-aliasing). */

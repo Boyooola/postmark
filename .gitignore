@@ -16,3 +16,7 @@ __pycache__/
 
 # local screenshots from verification runs
 .screens/
+
+# Level-10 mountain tiles (~400 MB): baked locally or hosted, not in git (see docs/geodata.md)
+apps/web/public/geo/tiles/10/
+apps/web/public/geo/tiles-10.json
