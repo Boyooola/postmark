@@ -1,5 +1,5 @@
 {
- "bakedAt": "2026-11-16T02:53:29+00:00",
+ "bakedAt": "2026-11-16T04:27:20+00:00",
  "projection": "equirectangular; x: lon -180..180, y: lat 90..-90, pixel centres",
  "height": {
   "file": "height.png",
@@ -108,6 +108,49 @@
    "name": "Natural Earth 1:10m vectors",
    "by": "naturalearthdata.com",
    "licence": "Public domain"
+  },
+  {
+   "name": "GEBCO_2026 Grid",
+   "by": "GEBCO Compilation Group (2026)",
+   "licence": "Free to use with acknowledgement (GEBCO terms of use)"
   }
- ]
+ ],
+ "detail8": {
+  "manifest": "tiles-8.json",
+  "tiles": 994,
+  "bytes": 45686384,
+  "source": "GEBCO_2026 Grid (ice surface), 15 arc-second",
+  "peaks": [
+   {
+    "id": "everest",
+    "gebco": 8341,
+    "after": 8849
+   },
+   {
+    "id": "matterhorn",
+    "gebco": 3753,
+    "after": 4478
+   },
+   {
+    "id": "aconcagua",
+    "gebco": 6571,
+    "after": 6961
+   },
+   {
+    "id": "mount-fuji",
+    "gebco": 3543,
+    "after": 3776
+   },
+   {
+    "id": "mayon-volcano",
+    "gebco": 2064,
+    "after": 2463
+   },
+   {
+    "id": "kilimanjaro",
+    "gebco": 5766,
+    "after": 5894
+   }
+  ]
+ }
 }

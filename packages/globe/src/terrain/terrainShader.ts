@@ -51,7 +51,7 @@ ${cloudChunk}
 uniform sampler2D uSurface;
 uniform sampler2D uAux;
 uniform sampler2D uCoast;     // signed km to the sea coast: (v*255 - 128) * 0.5, > 0 at sea
-uniform vec2 uStepRad;        // angular sample step: base map, detail window
+uniform vec3 uStepRad;        // angular sample step: base map, detail window, fine window
 uniform float uElevScale;
 uniform vec3 uCamPos;
 uniform float uHaze;
@@ -147,7 +147,7 @@ void main() {
   // local east/north great circles, one texel apart).
   vec2 hw = heightAt(dir);
   float h = hw.x;
-  float stp = mix(uStepRad.x, uStepRad.y, step(0.5, hw.y));
+  float stp = hw.y > 1.5 ? uStepRad.z : (hw.y > 0.5 ? uStepRad.y : uStepRad.x);
   float hE = heightAt(normalize(dir + east * stp)).x;
   float hW = heightAt(normalize(dir - east * stp)).x;
   float hN = heightAt(normalize(dir + north * stp)).x;
@@ -167,7 +167,8 @@ void main() {
   // Synthetic relief: strongest in mountains, gentle in hills, none on plains/sea.
   vec3 wp = dir * uRadius;
   float mountain = clamp(smoothstep(300.0, 2500.0, h) * 0.8 + smoothstep(0.06, 0.45, slope) * 0.7, 0.0, 1.0);
-  float reliefM = (50.0 + 430.0 * mountain) * uRelief * (1.0 - water);
+  // Less synthetic relief where real ~610 m data is present (level 2).
+  float reliefM = (50.0 + 430.0 * mountain) * uRelief * (1.0 - water) * (hw.y > 1.5 ? 0.4 : 1.0);
   float e0 = 0.0, ridgeV = 0.0;
   if (reliefM > 1.0 && pix < 0.6) {
     float de = max(pix * 1.5, 0.02);
@@ -192,7 +193,7 @@ void main() {
   float beach = (1.0 - smoothstep(0.0, 1.2, -coastKm)) * (1.0 - smoothstep(10.0, 60.0, h)) * (1.0 - ice);
   lc = mix(lc, vec3(0.36, 0.30, 0.20), beach * 0.75);
   // Rivers: thin dark water lines.
-  lc = mix(lc, vec3(0.012, 0.035, 0.06), smoothstep(0.25, 0.8, river) * 0.9);
+  lc = mix(lc, vec3(0.015, 0.045, 0.075), smoothstep(0.3, 0.9, river) * 0.75);
 
   // Ocean colour by real depth, lighter and greener in the shallows near shore.
   float depth = lake > 0.5 ? 40.0 : max(-h, 0.0);

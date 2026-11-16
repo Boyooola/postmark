@@ -200,3 +200,16 @@ describe("Deliveries", () => {
     expect(d.delivered).toBe(0);
   });
 });
+
+describe("TerrainHeights fine window", () => {
+  const base = new HeightField(4, 2, new Float32Array(8).fill(100));
+  it("layers base -> detail -> fine", () => {
+    const t = new TerrainHeights(base);
+    t.detail = { data: new Float32Array(64 * 64).fill(500), size: 64, lon0: 0, lat0: 20, spanDeg: 20 };
+    t.fine = { data: new Float32Array(32 * 32).fill(900), size: 32, lon0: 5, lat0: 15, spanDeg: 10 };
+    expect(t.sample(10, 10)).toBeCloseTo(900); // inside fine
+    expect(t.sample(10, 10, 1)).toBeCloseTo(500); // fine excluded
+    expect(t.sample(18, 2)).toBeCloseTo(500); // detail only
+    expect(t.sample(-30, -60)).toBeCloseTo(100); // base only
+  });
+});

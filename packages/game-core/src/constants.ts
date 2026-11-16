@@ -12,7 +12,7 @@
 export const EARTH_RADIUS_M = 6_371_000;
 export const WORLD_RADIUS = 1000;
 export const METERS_PER_UNIT = EARTH_RADIUS_M / WORLD_RADIUS; // 6371
-export const VERTICAL_EXAGGERATION = 8;
+export const VERTICAL_EXAGGERATION = 4;
 
 /** Real elevation in metres -> rendered height above the sea-level sphere, in world units. */
 export const elevationToUnits = (meters: number): number =>
@@ -40,12 +40,12 @@ export const FLIGHT = {
   pitchRate: 0.8, // rad/s change of climb angle
   maxClimbAngle: (30 * Math.PI) / 180,
   maxBankAngle: (40 * Math.PI) / 180,
-  /** default cruising altitude, real metres above sea level */
-  cruiseAltitudeM: 9_000,
-  /** minimum clearance above terrain, world units (~0.3 u = ~240 m real at 8x) */
+  /** default cruising altitude, real metres above sea level (high, for the big view) */
+  cruiseAltitudeM: 16_000,
+  /** minimum clearance above terrain, world units (0.3 u = ~480 m real at 4x) */
   minClearance: 0.3,
   /** ceiling, real metres */
-  ceilingM: 20_000,
+  ceilingM: 32_000,
   /** boost energy: drains while boosting, refills otherwise (fractions per second) */
   boostDrain: 0.22,
   boostRefill: 0.07,

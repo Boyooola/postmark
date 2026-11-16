@@ -355,7 +355,7 @@ def main() -> None:
         if props.get("featurecla", "").lower().startswith("lake centerline"):
             return 0
         sr = props.get("scalerank", 6) or 6
-        return 2 * max(0.6, 2.4 - 0.25 * float(sr))  # pixels at the 16384 working grid
+        return max(0.7, 1.7 - 0.15 * float(sr))  # pixels at the 16384 working grid (~1.7-4 km)
     rivers_w = np.minimum(raster_lines(ne("ne_10m_rivers_lake_centerlines"), WORK_W, WORK_H, river_width, ss=1), land_w)
 
     # Display masks: box-downsample 2x for anti-aliasing.

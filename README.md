@@ -3,12 +3,12 @@
 A cozy airmail flying game on a real Earth. Start a one-plane mail company in your hometown, fly letters
 across real mountains, coastlines and lakes, and grow it across a century of flight.
 
-**Status:** prototype, milestone 1.5 (sharper Earth: ETOPO 2022 terrain streaming and clouds) plus a Geographical Adventures-style flight UI and the first delivery loop. See [docs/milestones.md](docs/milestones.md).
+**Status:** prototype: real-Earth terrain (ETOPO 2022 everywhere, GEBCO ~610 m in 10 mountain regions), a Geographical Adventures-style flight UI, the first delivery loop, and Blender-made plane, parcel, balloons and landmarks. See [docs/milestones.md](docs/milestones.md).
 
 | | |
 | --- | --- |
-| ![Cruising over the Alps](docs/images/hud-alps.jpg) | ![Greek islands with surf](docs/images/greece.jpg) |
-| ![The Karakoram](docs/images/karakoram.jpg) | ![Target balloon over Bratislava](docs/images/hud-balloon.jpg) |
+| ![The Alps from cruising altitude](docs/images/hud-alps.jpg) | ![The Karakoram](docs/images/karakoram.jpg) |
+| ![Greek islands with surf](docs/images/greece.jpg) | ![A destination balloon](docs/images/hud-balloon.jpg) |
 
 ## Run it
 
@@ -45,5 +45,6 @@ pnpm geo:fetch && pnpm geo:bake   # rebuild the geo data (needs Python, see tool
 
 ## Data credits
 
-Elevation and bathymetry: ETOPO 2022 (and ETOPO1 as a fallback), NOAA National Centers for Environmental Information (public domain).
+Elevation and bathymetry: ETOPO 2022 (and ETOPO1 as a fallback), NOAA National Centers for Environmental Information (public domain);
+fine terrain: GEBCO Compilation Group (2026) GEBCO 2026 Grid.
 Coastlines, lakes, rivers, ice, cities: [Natural Earth](https://www.naturalearthdata.com) (public domain).

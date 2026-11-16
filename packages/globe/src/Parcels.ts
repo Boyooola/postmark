@@ -9,6 +9,10 @@ import {
   Vector3,
 } from "three";
 import { WORLD_RADIUS, elevationToUnits, vectorToLatLon, type LatLon } from "@postmark/game-core";
+import { loadTemplate, sizeOf } from "./models";
+
+/** Width of the parcel box in world units (it reads at the chase-camera distance). */
+const PARCEL_WIDTH = 0.26;
 
 const GRAVITY = 3.0; // world units / s^2 (game-scaled)
 const CHUTE_DELAY = 0.45; // seconds before the parachute opens
@@ -18,7 +22,7 @@ const LINGER = 2.5; // seconds a landed parcel stays visible
 
 interface Parcel {
   root: Group;
-  chute: Mesh;
+  chute: { scale: Vector3 };
   pos: Vector3;
   vel: Vector3;
   age: number;
@@ -39,19 +43,42 @@ export class Parcels {
   private q = new Quaternion();
   private yAxis = new Vector3(0, 1, 0);
 
+  private template: Group | null = null;
+  private templateScale = 1;
+
   constructor(
     private surfaceM: (lat: number, lon: number) => number,
     private onLanded: (where: LatLon) => void,
-  ) {}
+    modelUrl = "/models/props/parcel.glb",
+  ) {
+    void loadTemplate(modelUrl).then((t) => {
+      if (!t) return;
+      this.template = t;
+      const box = t.getObjectByName("box");
+      this.templateScale = PARCEL_WIDTH / Math.max(box ? sizeOf(box).x : 0.6, 1e-3);
+    });
+  }
 
   drop(from: Vector3, planeVelocity: Vector3) {
     const root = new Group();
-    const box = new Mesh(this.boxGeo, this.boxMat);
-    const chute = new Mesh(this.chuteGeo, this.chuteMat);
-    chute.position.y = 0.45;
-    chute.scale.setScalar(0.01);
-    root.add(box, chute);
-    root.scale.setScalar(2.2);
+    let chute: { scale: Vector3 };
+    const model = this.template?.clone(true);
+    const modelChute = model?.getObjectByName("chute");
+    if (model && modelChute) {
+      // Blender parcel: the "chute" node scales open.
+      model.scale.setScalar(this.templateScale);
+      modelChute.scale.setScalar(0.01);
+      root.add(model);
+      chute = modelChute;
+    } else {
+      const box = new Mesh(this.boxGeo, this.boxMat);
+      const m = new Mesh(this.chuteGeo, this.chuteMat);
+      m.position.y = 0.45;
+      m.scale.setScalar(0.01);
+      root.add(box, m);
+      root.scale.setScalar(2.2);
+      chute = m;
+    }
     this.group.add(root);
     this.parcels.push({
       root,

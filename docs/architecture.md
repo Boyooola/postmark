@@ -23,7 +23,8 @@ docs/                  geodata, blender pipeline, milestones
 | Engine | `Engine.ts` | Owns renderer, scene, loop, sun, cameras, HUD ticks; `debugView()` helps with screenshots and tests |
 | Assets | `assets.ts` | Loads `/geo/*` (incl. the tile manifest); decodes Terrarium to a `HeightField` (CPU) and a float texture (GPU); downsizes masks to the GPU's max texture size |
 | Terrain | `terrain/TerrainLOD.ts`, `terrainShader.ts` | Six cube faces, quadtree split by distance, one instanced 33×33 grid with skirts; displacement in GLSL; shading = palette, procedural relief detail, ocean waves/glitter/surf from the coast distance field |
-| Terrain streaming | `terrain/DetailTerrain.ts` + game-core `terrainHeights.ts` | 45° detail window of streamed tiles around the plane; `heightAt()` in GLSL and `TerrainHeights.sample()` on the CPU blend it identically |
+| Terrain streaming | `terrain/DetailTerrain.ts` + game-core `terrainHeights.ts` | Two windows around the plane: level 6 (45°, ~2.4 km) everywhere and level 8 (11.25°, ~610 m) in fine regions; `heightAt()` in GLSL and `TerrainHeights.sample()` on the CPU blend base → detail → fine identically |
+| Models | `models.ts` | Shared glTF template cache, cloning with per-instance materials (balloon colours) |
 | Clouds | `Clouds.ts`, `cloudParams.ts`, `cloudChunk` | Procedural layer at 3,200 m; the same density function shades clouds and casts shadows on terrain |
 | Atmosphere | `shaders/chunks.ts`, `Sky.ts`, `atmosphereParams.ts` | Rayleigh + Mie single scattering, 8 view samples, 4 sun samples; shared by sky and terrain (aerial perspective) |
 | Plane | `Plane.ts` | Loads the Blender glTF (`/models/aircraft/mailplane.glb`), placeholder fallback, ribbon trails |

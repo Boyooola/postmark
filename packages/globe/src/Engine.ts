@@ -106,6 +106,7 @@ export class Engine {
   private terrain!: TerrainLOD;
   private heights!: TerrainHeights;
   private detail: DetailTerrain | null = null;
+  private fine: DetailTerrain | null = null;
   private sky!: Sky;
   private clouds!: Clouds;
   private cloudUniforms = createCloudUniforms();
@@ -171,15 +172,32 @@ export class Engine {
 
     if (this.assets.tiles) {
       this.detail = new DetailTerrain(opts.assetBase, this.assets.tiles, this.heights, this.assets.floatLinear, (w) => {
-        this.terrain?.setDetailWindow(w);
+        if (w) this.terrain?.setDetailWindow(w);
         this.landmarks?.reposition();
       });
+    }
+    if (this.assets.tilesFine) {
+      // ~610 m terrain where it exists (mountain regions); off elsewhere.
+      this.fine = new DetailTerrain(
+        opts.assetBase,
+        this.assets.tilesFine,
+        this.heights,
+        this.assets.floatLinear,
+        (w) => {
+          this.terrain?.setFineWindow(w);
+          this.landmarks?.reposition();
+        },
+        (lat, lon) => this.heights.sample(lat, lon, 1),
+        (w) => (this.heights.fine = w),
+        true,
+      );
     }
     this.terrain = new TerrainLOD(
       {
         height: this.assets.heightTexture,
         heightSize: this.assets.heights,
         detail: this.detail?.texture ?? this.assets.heightTexture,
+        fine: this.fine?.texture ?? this.assets.heightTexture,
         surface: this.assets.surfaceTexture,
         aux: this.assets.auxTexture,
         coast: this.assets.coastTexture,
@@ -208,6 +226,10 @@ export class Engine {
       opts.onProgress?.("Streaming terrain around you", 0.95);
       const deg = this.assets.tiles!.degreesPerTile;
       await this.detail.load((s.lon + 180) / deg, (90 - s.lat) / deg);
+      if (this.fine) {
+        const d8 = this.assets.tilesFine!.degreesPerTile;
+        await this.fine.load((s.lon + 180) / d8, (90 - s.lat) / d8);
+      }
       if (this.disposed) return;
     }
     this.spawn(s.lat, s.lon, s.headingDeg, s.altitudeM);
@@ -235,7 +257,7 @@ export class Engine {
 
   /** True while a new high-resolution terrain window is loading. */
   get streaming(): boolean {
-    return this.detail?.loading ?? false;
+    return (this.detail?.loading ?? false) || (this.fine?.loading ?? false);
   }
 
   get landmarkList(): Landmark[] {
@@ -248,6 +270,7 @@ export class Engine {
     this.flight.spawn(lat, lon, headingDeg, altitudeM);
     this.trails.forEach((t) => t.reset());
     this.detail?.update(lat, lon, true);
+    this.fine?.update(lat, lon, true);
   }
 
   /** Developer shortcut: fly towards a landmark from ~250 km south of it. */
@@ -325,6 +348,8 @@ export class Engine {
     if (this.detail) {
       const p = this.flight.telemetry();
       this.detail.update(p.lat, p.lon);
+      // The fine window waits for the detail window it falls back on.
+      if (!this.detail.loading) this.fine?.update(p.lat, p.lon);
     }
     this.updateSun();
     this.updatePlane(t);
@@ -456,6 +481,7 @@ export class Engine {
     this.timer.dispose();
     this.terrain?.dispose();
     this.detail?.dispose();
+    this.fine?.dispose();
     this.sky?.dispose();
     this.clouds?.dispose();
     this.assets?.heightTexture.dispose();

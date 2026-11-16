@@ -10,6 +10,7 @@ The full game plan (eras, company, endgame, monetization) lives in the design do
 | **M1.5 Sharper Earth** | High-resolution terrain near the plane, clouds | Done |
 | **M1.6 Flight UI** | Geographical Adventures-style HUD and camera; first delivery loop | Done |
 | **M1.7 Look pass** | Geographical Adventures colours, rugged relief, ocean waves and surf, Blender plane | Done |
+| **M1.8 Fine terrain + Blender assets** | GEBCO ~610 m terrain for 10 regions, second streaming window, Blender parcel/balloon/landmarks | Done |
 | **M2 First delivery** | Letters, stamps, home airfield, Atlas (the drop loop already exists) | Next |
 | **M3 Feel polish** | Sound, wind, Blender aircraft + first landmark models, settings, perf pass | Planned |
 | Gate | "Flying feels great": testers keep flying 5+ minutes unprompted | |
@@ -52,9 +53,17 @@ The full game plan (eras, company, endgame, monetization) lives in the design do
 - Less haze at cruising altitude; clouds off by default.
 - The player's plane is now a Blender model (`tools/blender/mailplane.blend` to `mailplane.glb`), with a code placeholder as fallback.
 
+## M1.8: Fine terrain and Blender assets
+
+- GEBCO_2026 15″ grid baked into 994 level-8 tiles (~610 m, 46 MB) for the Himalaya & Karakoram, Alps, Rockies/Grand Canyon/Sierra, central Andes, Norway, Japan, New Zealand, Philippines, Kilimanjaro and Iceland (`bake_detail.py`, memory-mapped, ~1.5 min).
+- A second streaming window (11.25°) layers the fine data over the level-6 window; off automatically outside those regions. CPU and GPU blend base → detail → fine identically (tested).
+- Vertical exaggeration ×8 → ×4 now that slopes are real; cruising altitude raised to 16,000 m to keep the view; synthetic relief reduced where fine data exists; rivers re-baked thinner.
+- Blender: parachute parcel, hot-air balloon (gores recoloured per country) and five landmarks (Eiffel Tower, Great Pyramid, Big Ben, Burj Khalifa, CN Tower), all in `tools/blender/postmark-assets.blend`; the plane re-exported with merged meshes.
+
 ## Known issues to pick up
 
-- Mountain detail is procedural, not real erosion; real high-resolution normal maps (ETOPO 15″ / Copernicus) would be the next step for exact ridgelines.
+- Outside the 10 fine regions terrain is ~2.4 km; Denali, Table Mountain and the Caucasus are not covered yet.
+- Mountain detail between 610 m and the screen is procedural, not real erosion; real high-resolution normal maps (ETOPO 15″ / Copernicus) would be the next step for exact ridgelines.
 - Balloons use colour stripes; flags (as in Geographical Adventures) need flag art.
 - No sounds yet for drops and deliveries.
 - Restored summits are smooth cones; regions like the Himalaya would benefit from ETOPO 2022 15″ tiles.

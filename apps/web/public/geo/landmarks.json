@@ -9,6 +9,7 @@
    "lat": 48.8584,
    "lon": 2.2945,
    "structureHeightM": 330,
+   "model": "/models/landmarks/eiffel-tower.glb",
    "groundElevationM": 43
   },
   {
@@ -20,6 +21,7 @@
    "lat": 51.5007,
    "lon": -0.1246,
    "structureHeightM": 96,
+   "model": "/models/landmarks/big-ben.glb",
    "groundElevationM": 13
   },
   {
@@ -131,6 +133,7 @@
    "lat": 29.9792,
    "lon": 31.1342,
    "structureHeightM": 139,
+   "model": "/models/landmarks/giza-pyramids.glb",
    "groundElevationM": 43
   },
   {
@@ -153,6 +156,7 @@
    "lat": 25.1972,
    "lon": 55.2744,
    "structureHeightM": 828,
+   "model": "/models/landmarks/burj-khalifa.glb",
    "groundElevationM": 2
   },
   {
@@ -479,6 +483,7 @@
    "lat": 43.6426,
    "lon": -79.3871,
    "structureHeightM": 553,
+   "model": "/models/landmarks/cn-tower.glb",
    "groundElevationM": 94
   }
  ]

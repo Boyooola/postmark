@@ -10,7 +10,6 @@ import {
   ShaderMaterial,
   Sphere,
   Texture,
-  Vector2,
   Vector3,
   Vector4,
 } from "three";
@@ -37,6 +36,7 @@ export interface TerrainTextures {
   height: Texture;
   heightSize: { width: number; height: number };
   detail: Texture;
+  fine: Texture;
   surface: Texture;
   aux: Texture;
   coast: Texture;
@@ -129,8 +129,10 @@ export class TerrainLOD {
         uRelief: { value: 1 },
         uDetail: { value: tex.detail },
         uDetailRect: { value: new Vector4(0, 0, 1, 0) },
+        uFine: { value: tex.fine },
+        uFineRect: { value: new Vector4(0, 0, 1, 0) },
         uDetailFade: { value: DETAIL_EDGE_FADE },
-        uStepRad: { value: new Vector2((2 * Math.PI) / tex.heightSize.width, 0.001) },
+        uStepRad: { value: new Vector3((2 * Math.PI) / tex.heightSize.width, 0.001, 0.0002) },
         uElevScale: { value: elevationToUnits(1) },
         uSkirt: { value: 0.02 * WORLD_RADIUS },
         uCamPos: { value: new Vector3() },
@@ -146,7 +148,15 @@ export class TerrainLOD {
   /** Point the shaders at a newly loaded detail window. */
   setDetailWindow(w: DetailWindow) {
     (this.material.uniforms.uDetailRect.value as Vector4).set(w.lon0, w.lat0, w.spanDeg, 1);
-    (this.material.uniforms.uStepRad.value as Vector2).y = ((w.spanDeg / w.size) * Math.PI) / 180;
+    (this.material.uniforms.uStepRad.value as Vector3).y = ((w.spanDeg / w.size) * Math.PI) / 180;
+  }
+
+  /** The fine (~610 m) window; null turns it off (no fine data near the plane). */
+  setFineWindow(w: DetailWindow | null) {
+    const r = this.material.uniforms.uFineRect.value as Vector4;
+    if (!w) return void r.setW(0);
+    r.set(w.lon0, w.lat0, w.spanDeg, 1);
+    (this.material.uniforms.uStepRad.value as Vector3).z = ((w.spanDeg / w.size) * Math.PI) / 180;
   }
 
   /** Per-frame values: animation time and the size of a screen pixel (for anti-aliasing). */

@@ -40,12 +40,20 @@ export class DetailTerrain {
   private ctx: OffscreenCanvasRenderingContext2D;
   private origin = { tx0: Number.NaN, ty0: Number.NaN };
 
+  /**
+   * @param fill   elevation to use where no tile was baked (the coarser data)
+   * @param assign where the live window goes in TerrainHeights (detail or fine)
+   * @param skipEmpty if true, a window with no baked tiles at all is not used (null)
+   */
   constructor(
     private baseUrl: string,
     private manifest: TileManifest,
     private heights: TerrainHeights,
     private floatLinear: boolean,
-    private onChange: (w: DetailWindow) => void,
+    private onChange: (w: DetailWindow | null) => void,
+    private fill: (lat: number, lon: number) => number = (lat, lon) => heights.base.sample(lat, lon),
+    private assign: (w: DetailWindow | null) => void = (w) => (heights.detail = w),
+    private skipEmpty = false,
   ) {
     this.size = manifest.tileSize * TILES_ACROSS;
     this.present = new Set(manifest.tiles);
@@ -70,7 +78,7 @@ export class DetailTerrain {
     const { degreesPerTile: deg, cols } = this.manifest;
     const fx = (lon + 180) / deg;
     const fy = (90 - lat) / deg;
-    if (!force && this.window) {
+    if (!force && (this.window || (this.skipEmpty && !Number.isNaN(this.origin.tx0)))) {
       const cx = this.origin.tx0 + TILES_ACROSS / 2;
       const cy = this.origin.ty0 + TILES_ACROSS / 2;
       let dx = Math.abs(fx - cx) % cols;
@@ -87,9 +95,17 @@ export class DetailTerrain {
     const { rows, degreesPerTile: deg } = this.manifest;
     const tx0 = Math.round(fx - TILES_ACROSS / 2);
     const ty0 = Math.max(0, Math.min(rows - TILES_ACROSS, Math.round(fy - TILES_ACROSS / 2)));
-    if (tx0 === this.origin.tx0 && ty0 === this.origin.ty0 && this.window) return;
+    if (tx0 === this.origin.tx0 && ty0 === this.origin.ty0 && (this.window || this.skipEmpty)) return;
     this.loading = true;
     try {
+      if (this.skipEmpty && !this.anyTiles(tx0, ty0)) {
+        // Nothing sharper here: switch the window off.
+        this.window = null;
+        this.origin = { tx0, ty0 };
+        this.assign(null);
+        this.onChange(null);
+        return;
+      }
       const ts = this.manifest.tileSize;
       const n = this.size;
       const data = new Float32Array(n * n);
@@ -116,7 +132,7 @@ export class DetailTerrain {
       this.texture.needsUpdate = true;
       this.window = win;
       this.origin = { tx0, ty0 };
-      this.heights.detail = win;
+      this.assign(win);
       this.onChange(win);
     } finally {
       this.loading = false;
@@ -147,17 +163,25 @@ export class DetailTerrain {
       out = new Float32Array(ts * ts);
       for (let k = 0, p = 0; k < out.length; k++, p += 4) out[k] = px[p] * 256 + px[p + 1] + px[p + 2] / 256 - 32768;
     } else {
-      // Open ocean: no tile was baked, so fill from the base map.
+      // No tile was baked here: fill from the coarser data.
       out = new Float32Array(ts * ts);
       const lonW = -180 + tx * deg, latN = 90 - ty * deg, step = deg / ts;
       for (let y = 0; y < ts; y++) {
         const lat = latN - (y + 0.5) * step;
-        for (let x = 0; x < ts; x++) out[y * ts + x] = this.heights.base.sample(lat, lonW + (x + 0.5) * step);
+        for (let x = 0; x < ts; x++) out[y * ts + x] = this.fill(lat, lonW + (x + 0.5) * step);
       }
+      return out; // not cached: the coarser data it came from may change
     }
     this.cache.set(key, out);
     if (this.cache.size > CACHE_LIMIT) this.cache.delete(this.cache.keys().next().value!);
     return out;
+  }
+
+  private anyTiles(tx0: number, ty0: number) {
+    const { cols } = this.manifest;
+    for (let j = 0; j < TILES_ACROSS; j++)
+      for (let i = 0; i < TILES_ACROSS; i++) if (this.present.has(`${(((tx0 + i) % cols) + cols) % cols}_${ty0 + j}`)) return true;
+    return false;
   }
 
   dispose() {

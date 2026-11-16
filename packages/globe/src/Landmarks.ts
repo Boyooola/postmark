@@ -28,7 +28,7 @@ import {
  * DISPLAY_SCALE (on top of the terrain's vertical exaggeration) so a 330 m
  * tower is readable from a plane flying at several kilometres.
  */
-export const LANDMARK_DISPLAY_SCALE = 4;
+export const LANDMARK_DISPLAY_SCALE = 6;
 const MIN_HEIGHT_UNITS = 0.35;
 
 const KIND_COLOR: Record<LandmarkKind, number> = {

@@ -11,6 +11,7 @@ import {
   Vector2,
   Vector3,
 } from "three";
+import { cloneWithMaterials, findMaterial, loadTemplate, sizeOf } from "./models";
 import {
   FLIGHT,
   WORLD_RADIUS,
@@ -18,6 +19,9 @@ import {
   latLonToDirection,
   type DeliveryTarget,
 } from "@postmark/game-core";
+
+/** Height of a balloon in world units before distance scaling. */
+const BALLOON_HEIGHT = 1.6;
 
 /** Two-colour stripe palettes; a country always gets the same one. */
 const PALETTES: [number, number][] = [
@@ -86,8 +90,33 @@ export class Balloons {
   readonly group = new Group();
   private entries = new Map<string, BalloonEntry>();
   private tmp = new Vector3();
+  private template: Group | null = null;
+  private templateScale = 1;
 
-  constructor(private surfaceM: (lat: number, lon: number) => number) {}
+  constructor(private surfaceM: (lat: number, lon: number) => number, modelUrl = "/models/props/balloon.glb") {
+    // The Blender balloon replaces the code-built one when it arrives.
+    void loadTemplate(modelUrl).then((t) => {
+      if (!t) return;
+      this.template = t;
+      this.templateScale = BALLOON_HEIGHT / Math.max(sizeOf(t).y, 1e-3);
+      const targets = [...this.entries.values()].map((e) => e.target);
+      for (const e of this.entries.values()) this.group.remove(e.root);
+      this.entries.clear();
+      this.sync(targets);
+    });
+  }
+
+  private build(country: string): Group {
+    if (!this.template) return buildBalloon(country);
+    const [a, b] = PALETTES[hash(country) % PALETTES.length];
+    const model = cloneWithMaterials(this.template, ["gore_a", "gore_b"]);
+    findMaterial(model, "gore_a")?.color.setHex(a);
+    findMaterial(model, "gore_b")?.color.setHex(b);
+    model.scale.setScalar(this.templateScale);
+    const g = new Group();
+    g.add(model);
+    return g;
+  }
 
   /** Make the balloons match the open destinations. */
   sync(targets: readonly DeliveryTarget[]) {
@@ -101,9 +130,9 @@ export class Balloons {
     for (const t of targets) {
       if (this.entries.has(t.id)) continue;
       const up = latLonToDirection(t.lat, t.lon);
-      const altM = Math.max(FLIGHT.cruiseAltitudeM - 1800, this.surfaceM(t.lat, t.lon) + 2500);
+      const altM = Math.max(FLIGHT.cruiseAltitudeM - 3500, this.surfaceM(t.lat, t.lon) + 4000);
       const base = up.clone().multiplyScalar(WORLD_RADIUS + elevationToUnits(altM));
-      const root = buildBalloon(t.country);
+      const root = this.build(t.country);
       root.quaternion.copy(new Quaternion().setFromUnitVectors(new Vector3(0, 1, 0), up));
       root.position.copy(base);
       this.group.add(root);
