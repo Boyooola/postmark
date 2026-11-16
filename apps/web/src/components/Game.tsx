@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Engine } from "@postmark/globe";
+import { Engine, type HudState } from "@postmark/globe";
 import { formatLatLon } from "@postmark/game-core";
 import { useHud } from "./hudStore";
 
@@ -16,7 +16,7 @@ const nf = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 export default function Game() {
   const host = useRef<HTMLDivElement>(null);
   const [engine, setEngine] = useState<Engine | null>(null);
-  const { setHud, setProgress, setError, toggleHelp } = useHud.getState();
+  const { setHud, setProgress, setError, toggleHelp, toggleDebug, pushEvent } = useHud.getState();
 
   useEffect(() => {
     let e: Engine | null = null;
@@ -26,7 +26,11 @@ export default function Game() {
       assetBase: "/geo",
       onProgress: setProgress,
       onHud: setHud,
-      onAction: (a) => a === "help" && toggleHelp(),
+      onEvent: pushEvent,
+      onAction: (a) => {
+        if (a === "help") toggleHelp();
+        if (a === "debug") toggleDebug();
+      },
     })
       .then((eng) => {
         if (cancelled) return eng.dispose();
@@ -35,12 +39,15 @@ export default function Game() {
         setEngine(eng);
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
+    // The controls hint fades away on its own.
+    const hide = setTimeout(() => toggleHelp(false), 20000);
     return () => {
       cancelled = true;
+      clearTimeout(hide);
       e?.dispose();
       delete window.__postmark;
     };
-  }, [setHud, setProgress, setError, toggleHelp]);
+  }, [setHud, setProgress, setError, toggleHelp, toggleDebug, pushEvent]);
 
   return (
     <div className="game">
@@ -71,136 +78,171 @@ function Loading() {
   );
 }
 
-function Arrow({ deg }: { deg: number }) {
-  return (
-    <span className="arrow" style={{ transform: `rotate(${deg}deg)` }} aria-hidden>
-      ▲
-    </span>
-  );
-}
-
-function Compass({ heading }: { heading: number }) {
-  const marks = [];
-  for (let d = -90; d <= 90; d += 15) {
-    const h = (Math.round(heading / 15) * 15 + d + 360) % 360;
-    const offset = ((h - heading + 540) % 360) - 180;
-    const names: Record<number, string> = { 0: "N", 45: "NE", 90: "E", 135: "SE", 180: "S", 225: "SW", 270: "W", 315: "NW" };
-    marks.push(
-      <span key={d} className={names[h] ? "major" : ""} style={{ left: `calc(50% + ${offset * 2.4}px)` }}>
-        {names[h] ?? "·"}
-      </span>,
-    );
-  }
-  return (
-    <div className="compass">
-      <div className="tape">{marks}</div>
-      <div className="needle" />
-      <div className="value">{String(Math.round(heading) % 360).padStart(3, "0")}°</div>
-    </div>
-  );
-}
+/* ------------------------------------------------------------------ HUD */
 
 function Hud({ engine }: { engine: Engine }) {
   const hud = useHud((s) => s.hud);
   const showHelp = useHud((s) => s.showHelp);
+  const showDebug = useHud((s) => s.showDebug);
+  const toasts = useHud((s) => s.toasts);
   if (!hud) return null;
-  const t = hud.telemetry;
   return (
     <div className="hud">
-      <Compass heading={t.headingDeg} />
-
-      <section className="panel left">
-        <Row k="Altitude" v={`${nf.format(t.altitudeM)} m`} />
-        <Row k="Ground" v={`${nf.format(t.groundM)} m`} />
-        <Row k="Above ground" v={`${nf.format(t.aglM)} m`} />
-        <Row k="Airspeed" v={`${nf.format(t.airspeedKmh)} km/h`} />
-        <Row k="Climb" v={`${t.climbDeg.toFixed(0)}°`} />
-        {t.scraping && <p className="warn">Terrain! Pull up</p>}
-      </section>
-
-      <section className="panel right">
-        {hud.landmark && (
-          <div className="target">
-            <p className="label">Nearest landmark</p>
-            <p className="name">
-              <Arrow deg={hud.landmark.relativeDeg} /> {hud.landmark.name}
-            </p>
-            <p className="sub">
-              {hud.landmark.detail} · {nf.format(hud.landmark.distanceKm)} km
-            </p>
+      <Targets hud={hud} />
+      <BoostGauge hud={hud} />
+      <Compass heading={hud.telemetry.headingDeg} />
+      <div className="toasts">
+        {toasts.map((t) => (
+          <div key={t.id} className={`toast ${t.kind}`}>
+            <strong>{t.title}</strong>
+            <span>{t.detail}</span>
           </div>
-        )}
-        {hud.city && (
-          <div className="target">
-            <p className="label">Nearest city</p>
-            <p className="name">
-              <Arrow deg={hud.city.relativeDeg} /> {hud.city.name}
-            </p>
-            <p className="sub">
-              {hud.city.detail} · {nf.format(hud.city.distanceKm)} km
-            </p>
-          </div>
-        )}
-      </section>
-
-      <section className="panel bottom-left">
-        <Row k="Position" v={formatLatLon(t)} />
-        <Row k="Local time" v={`${hud.localTime}${hud.timeScale === 0 ? " (paused)" : hud.timeScale !== 60 ? ` (×${hud.timeScale / 60})` : ""}`} />
-        <Row k="Render" v={`${hud.fps} fps · ${hud.chunks} chunks`} />
-        {hud.streaming && <p className="streaming">Loading sharper terrain…</p>}
-      </section>
-
-      <section className="panel bottom-right">
-        <label>
-          Fly to
-          <select
-            defaultValue=""
-            onChange={(e) => {
-              if (e.target.value) engine.teleportToLandmark(e.target.value);
-              e.target.blur();
-              e.target.value = "";
-            }}
-          >
-            <option value="" disabled>
-              a landmark…
-            </option>
-            {[...engine.landmarkList]
-              .sort((a, b) => a.name.localeCompare(b.name))
-              .map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.name} ({l.country})
-                </option>
-              ))}
-          </select>
-        </label>
-        <button onClick={() => engine.setCameraMode(hud.cameraMode === "chase" ? "orbit" : "chase")}>
-          {hud.cameraMode === "chase" ? "Globe view" : "Back to plane"}
-        </button>
-      </section>
-
-      {showHelp && (
-        <section className="help">
-          <h2>Controls</h2>
-          <ul>
-            <li><kbd>W</kbd>/<kbd>S</kbd> or <kbd>↑</kbd>/<kbd>↓</kbd> climb / descend</li>
-            <li><kbd>A</kbd>/<kbd>D</kbd> or <kbd>←</kbd>/<kbd>→</kbd> turn</li>
-            <li><kbd>Shift</kbd> or <kbd>Space</kbd> boost · <kbd>Q</kbd> slow</li>
-            <li><kbd>C</kbd> globe view · <kbd>R</kbd> restart here</li>
-            <li><kbd>T</kbd>/<kbd>G</kbd> time faster / slower</li>
-            <li><kbd>H</kbd> hide this</li>
-          </ul>
-          <p>Gamepad: left stick to fly, right trigger to boost.</p>
-        </section>
-      )}
+        ))}
+      </div>
+      {showHelp && <Help />}
+      {showDebug && <Debug hud={hud} engine={engine} />}
     </div>
   );
 }
 
-function Row({ k, v }: { k: string; v: string }) {
+/** Up to three destinations across the top: arrow, country, city. */
+function Targets({ hud }: { hud: HudState }) {
   return (
-    <p className="row">
-      <span>{k}</span>
-      <b>{v}</b>
-    </p>
+    <div className="targets">
+      {hud.targets.map((t) => (
+        <div className="target" key={`${t.city}|${t.country}`}>
+          <div className="target-head">
+            <span className="target-arrow" aria-hidden>
+              <svg viewBox="0 0 24 24" style={{ transform: `rotate(${t.relativeDeg}deg)` }}>
+                <circle cx="12" cy="12" r="11" />
+                <path d="M12 5.5 L17 12.5 H13.6 V18.5 H10.4 V12.5 H7 Z" />
+              </svg>
+            </span>
+            <span className="target-country">{t.country}</span>
+          </div>
+          <span className="target-city">{t.city}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const ARC_START = -135;
+const ARC_END = 135;
+function polar(cx: number, cy: number, r: number, deg: number) {
+  const a = ((deg - 90) * Math.PI) / 180;
+  return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+}
+function arc(cx: number, cy: number, r: number, from: number, to: number) {
+  const [x0, y0] = polar(cx, cy, r, from);
+  const [x1, y1] = polar(cx, cy, r, to);
+  const large = to - from > 180 ? 1 : 0;
+  return `M ${cx} ${cy} L ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1} Z`;
+}
+
+/** Bottom left: run timer, then a dial with the boost left (grey) and the speed (needle). */
+function BoostGauge({ hud }: { hud: HudState }) {
+  const t = hud.telemetry;
+  const boostEnd = ARC_START + (ARC_END - ARC_START) * t.boostEnergy;
+  const needle = ARC_START + (ARC_END - ARC_START) * Math.max(0, Math.min(1, t.speedFraction));
+  const [nx, ny] = polar(60, 60, 40, needle);
+  const mins = Math.floor(hud.elapsedS / 60);
+  const secs = Math.floor(hud.elapsedS % 60);
+  return (
+    <div className="gauge">
+      <div className="timer">
+        {String(mins).padStart(2, "0")}:{String(secs).padStart(2, "0")}
+      </div>
+      {hud.delivered > 0 && <div className="delivered">{hud.delivered} delivered</div>}
+      <svg viewBox="0 0 120 120" className={t.boosting ? "boosting" : ""}>
+        <circle cx="60" cy="60" r="56" className="dial-bg" />
+        {t.boostEnergy > 0.005 && <path d={arc(60, 60, 50, ARC_START, Math.max(ARC_START + 0.5, boostEnd))} className="dial-boost" />}
+        <circle cx="60" cy="60" r="34" className="dial-hub" />
+        <text x="14" y="66" className="dial-label">Min</text>
+        <text x="106" y="66" className="dial-label" textAnchor="end">Max</text>
+        <text x="60" y="110" className="dial-label" textAnchor="middle">Boost</text>
+        <line x1="60" y1="60" x2={nx} y2={ny} className="dial-needle" />
+        <circle cx="60" cy="60" r="4" className="dial-pin" />
+      </svg>
+    </div>
+  );
+}
+
+/** Bottom right: the plane stays put, the cardinal letters turn around it. */
+function Compass({ heading }: { heading: number }) {
+  const letters: [string, number][] = [["N", 0], ["E", 90], ["S", 180], ["W", 270]];
+  return (
+    <div className="compass">
+      <svg viewBox="0 0 120 120">
+        <circle cx="60" cy="60" r="56" className="dial-bg" />
+        <g transform={`rotate(${-heading} 60 60)`}>
+          {letters.map(([l, d]) => {
+            const [x, y] = polar(60, 60, 44, d);
+            return (
+              <text key={l} x={x} y={y + 5} textAnchor="middle" className="compass-letter" transform={`rotate(${d} ${x} ${y})`}>
+                {l}
+              </text>
+            );
+          })}
+        </g>
+        <path
+          className="compass-plane"
+          d="M60 30 L63 46 L84 56 L84 61 L63 57 L62 74 L69 79 L69 82 L60 80 L51 82 L51 79 L58 74 L57 57 L36 61 L36 56 L57 46 Z"
+        />
+      </svg>
+    </div>
+  );
+}
+
+function Help() {
+  return (
+    <div className="help">
+      <span><kbd>W</kbd><kbd>S</kbd> climb · dive</span>
+      <span><kbd>A</kbd><kbd>D</kbd> turn</span>
+      <span><kbd>Shift</kbd> boost</span>
+      <span><kbd>Space</kbd> drop parcel</span>
+      <span><kbd>H</kbd> hide</span>
+    </div>
+  );
+}
+
+/** Developer overlay (backtick): numbers, streaming state, teleport. */
+function Debug({ hud, engine }: { hud: HudState; engine: Engine }) {
+  const t = hud.telemetry;
+  return (
+    <section className="debug">
+      <p className="row"><span>Position</span><b>{formatLatLon(t)}</b></p>
+      <p className="row"><span>Altitude</span><b>{nf.format(t.altitudeM)} m</b></p>
+      <p className="row"><span>Ground</span><b>{nf.format(t.groundM)} m</b></p>
+      <p className="row"><span>Airspeed</span><b>{nf.format(t.airspeedKmh)} km/h</b></p>
+      <p className="row"><span>Local time</span><b>{hud.localTime}{hud.timeScale !== 60 ? ` (×${hud.timeScale / 60})` : ""}</b></p>
+      <p className="row"><span>Render</span><b>{hud.fps} fps · {hud.chunks} chunks</b></p>
+      <p className="row"><span>Terrain</span><b>{hud.streaming ? "streaming…" : "ready"}</b></p>
+      {hud.landmark && (
+        <p className="row"><span>Landmark</span><b>{hud.landmark.name} · {nf.format(hud.landmark.distanceKm)} km</b></p>
+      )}
+      {hud.targets.map((x) => (
+        <p className="row" key={x.city}><span>{x.city}</span><b>{nf.format(x.distanceKm)} km</b></p>
+      ))}
+      <label>
+        Fly to
+        <select
+          defaultValue=""
+          onChange={(e) => {
+            if (e.target.value) engine.teleportToLandmark(e.target.value);
+            e.target.blur();
+            e.target.value = "";
+          }}
+        >
+          <option value="" disabled>a landmark…</option>
+          {[...engine.landmarkList]
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map((l) => (
+              <option key={l.id} value={l.id}>{l.name} ({l.country})</option>
+            ))}
+        </select>
+      </label>
+      <p className="hint">T / G: time of day faster / slower · R: restart here</p>
+    </section>
   );
 }

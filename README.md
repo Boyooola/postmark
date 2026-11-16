@@ -3,12 +3,12 @@
 A cozy airmail flying game on a real Earth. Start a one-plane mail company in your hometown, fly letters
 across real mountains, coastlines and lakes, and grow it across a century of flight.
 
-**Status:** prototype, milestone 1.5 (sharper Earth: ETOPO 2022 terrain streaming and clouds). See [docs/milestones.md](docs/milestones.md).
+**Status:** prototype, milestone 1.5 (sharper Earth: ETOPO 2022 terrain streaming and clouds) plus a Geographical Adventures-style flight UI and the first delivery loop. See [docs/milestones.md](docs/milestones.md).
 
 | | |
 | --- | --- |
-| ![Approaching the Matterhorn](docs/images/alps.jpg) | ![Norwegian fjords](docs/images/fjords.jpg) |
-| ![Sunset over Aconcagua](docs/images/andes-sunset.jpg) | ![Clouds over Africa and Europe](docs/images/orbit-clouds.jpg) |
+| ![Cruising over the Alps](docs/images/hud-alps.jpg) | ![Target balloon over Bratislava](docs/images/hud-balloon.jpg) |
+| ![Sunset over Aconcagua](docs/images/andes-sunset.jpg) | ![Norwegian fjords](docs/images/fjords.jpg) |
 
 ## Run it
 
@@ -19,8 +19,12 @@ pnpm install
 pnpm dev          # http://localhost:3000, then click "Take off"
 ```
 
-Controls: **W/S** climb and descend · **A/D** turn · **Shift** or **Space** boost · **Q** slow ·
-**C** globe view · **R** restart · **T/G** time of day faster or slower · **H** help. Gamepads work too.
+Fly to the destinations shown at the top (the arrows point the way), find the hot-air balloon over the
+city, and drop a parcel by parachute close to it.
+
+Controls: **W/S** climb and descend · **A/D** turn · **Shift** boost · **Space** drop a parcel · **Q** slow ·
+**R** restart · **T/G** time of day faster or slower · **H** controls hint · **`** developer overlay.
+Gamepad: left stick to fly, right trigger to boost, A to drop.
 
 ## Repository
 

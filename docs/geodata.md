@@ -87,9 +87,9 @@ Add a mountain to `landmarks.source.json` with `summitM` and re-bake to restore 
 | Vertical exaggeration | **×8** (was ×12 with the 18 km data) | readable relief without turning mountains into needles now that slopes are resolved |
 | Landmark display scale | ×4 on top of the exaggeration | a 330 m tower must be readable from a few km up |
 | Cloud layer | 3,200 m | procedural, see below |
-| Cruise speed | 2 units/s; HUD shows 360 km/h | time is compressed so flights take minutes |
-| Minimum clearance | 0.15 units (~120 m real) | |
-| Ceiling | 15,000 m | |
+| Cruising altitude | 9,000 m (ceiling 20,000 m) | high enough to see whole ranges and the planet's curve |
+| Cruise speed | 5 units/s (boost 12) | time is compressed so continents take minutes |
+| Minimum clearance | 0.3 units (~240 m real) | |
 
 All data, physics and HUD numbers stay in **real metres**. Only rendering and the collision surface (so it
 matches what you see) use the exaggerated heights.

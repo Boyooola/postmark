@@ -26,23 +26,29 @@ export const unitsToElevation = (units: number): number =>
 export const unitsToKm = (units: number): number => (units * METERS_PER_UNIT) / 1000;
 
 /**
- * Flight tuning. Speeds are in world units per second. The game compresses
- * time: the HUD shows an airspeed that feels right for a small plane rather
- * than the true ground speed (2 u/s would be ~46,000 km/h).
+ * Flight tuning, in the style of Geographical Adventures: the plane cruises
+ * high and fast so the planet's curve and whole mountain ranges are in view.
+ * Speeds are world units per second; time is compressed (the HUD shows a
+ * plausible airspeed, not the true ground speed).
  */
 export const FLIGHT = {
-  cruiseSpeed: 2.0,
-  boostSpeed: 5.5,
-  slowSpeed: 1.0,
-  acceleration: 1.6,
-  turnRate: 0.9, // rad/s at full input
-  pitchRate: 0.9, // rad/s change of climb angle
-  maxClimbAngle: (35 * Math.PI) / 180,
-  maxBankAngle: (45 * Math.PI) / 180,
-  /** minimum clearance above terrain, world units (~120 m real at 8x) */
-  minClearance: 0.15,
+  cruiseSpeed: 5.0,
+  boostSpeed: 12.0,
+  slowSpeed: 2.5,
+  acceleration: 4.0,
+  turnRate: 1.1, // rad/s at full input
+  pitchRate: 0.8, // rad/s change of climb angle
+  maxClimbAngle: (30 * Math.PI) / 180,
+  maxBankAngle: (40 * Math.PI) / 180,
+  /** default cruising altitude, real metres above sea level */
+  cruiseAltitudeM: 9_000,
+  /** minimum clearance above terrain, world units (~0.3 u = ~240 m real at 8x) */
+  minClearance: 0.3,
   /** ceiling, real metres */
-  ceilingM: 15_000,
+  ceilingM: 20_000,
+  /** boost energy: drains while boosting, refills otherwise (fractions per second) */
+  boostDrain: 0.22,
+  boostRefill: 0.07,
   /** HUD airspeed = speed * this (km/h) */
-  displayKmhPerUnit: 180,
+  displayKmhPerUnit: 90,
 } as const;

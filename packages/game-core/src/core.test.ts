@@ -4,6 +4,9 @@ import {
   FlightModel,
   HeightField,
   TerrainHeights,
+  Deliveries,
+  DELIVERY,
+  mulberry32,
   WORLD_RADIUS,
   bearingDeg,
   distanceKm,
@@ -13,6 +16,7 @@ import {
   latLonToVector,
   unitsToElevation,
   vectorToLatLon,
+  type City,
 } from "./index";
 
 describe("geo", () => {
@@ -130,5 +134,69 @@ describe("TerrainHeights", () => {
     expect(t.sample(5, -180)).toBeCloseTo(700);
     expect(t.sample(5, 179)).toBeCloseTo(700);
     expect(t.sample(5, -170)).toBeCloseTo(100);
+  });
+});
+
+describe("Boost", () => {
+  it("drains while boosting and refills afterwards", () => {
+    const f = new FlightModel(() => 0);
+    f.spawn(0, 0, 0);
+    for (let i = 0; i < 120; i++) f.update(1 / 60, { pitch: 0, turn: 0, boost: true, slow: false });
+    const drained = f.boostEnergy;
+    expect(drained).toBeLessThan(0.8);
+    expect(f.speed).toBeGreaterThan(FLIGHT.cruiseSpeed);
+    for (let i = 0; i < 120; i++) f.update(1 / 60, { pitch: 0, turn: 0, boost: false, slow: false });
+    expect(f.boostEnergy).toBeGreaterThan(drained);
+  });
+
+  it("stops boosting when empty", () => {
+    const f = new FlightModel(() => 0);
+    f.spawn(0, 0, 0);
+    for (let i = 0; i < 60 * 8; i++) f.update(1 / 60, { pitch: 0, turn: 0, boost: true, slow: false });
+    expect(f.boostEnergy).toBeLessThan(0.02);
+    expect(f.telemetry().boosting).toBe(false);
+  });
+});
+
+describe("Deliveries", () => {
+  const city = (name: string, country: string, lat: number, lon: number, pop = 5_000_000): City => ({
+    name, country, lat, lon, pop, capital: false, elevationM: 0,
+  });
+  const cities: City[] = [
+    city("Paris", "France", 48.86, 2.35),
+    city("Cairo", "Egypt", 30.04, 31.24),
+    city("Moscow", "Russia", 55.76, 37.62),
+    city("Lagos", "Nigeria", 6.52, 3.38),
+    city("Mumbai", "India", 19.08, 72.88),
+    city("Tinyville", "Nowhere", 10, 10, 2000), // too small to be a destination
+  ];
+
+  it("opens three well-separated destinations away from the player", () => {
+    const d = new Deliveries(cities, mulberry32(1));
+    expect(d.poolSize).toBe(5);
+    d.start({ lat: 48.86, lon: 2.35 }); // from Paris
+    expect(d.targets).toHaveLength(DELIVERY.activeTargets);
+    expect(d.targets.find((t) => t.city === "Paris")).toBeUndefined();
+  });
+
+  it("counts a parcel that lands close to a destination and replaces it", () => {
+    const d = new Deliveries(cities, mulberry32(2));
+    d.start({ lat: 48.86, lon: 2.35 });
+    const t = d.targets[0];
+    const r = d.resolveDrop({ lat: t.lat + 0.3, lon: t.lon })!; // ~33 km north
+    expect(r.hit).toBe(true);
+    expect(r.distanceKm).toBeLessThan(40);
+    expect(d.delivered).toBe(1);
+    expect(d.targets.find((x) => x.id === t.id)).toBeUndefined();
+  });
+
+  it("reports a miss with the distance", () => {
+    const d = new Deliveries(cities, mulberry32(3));
+    d.start({ lat: 48.86, lon: 2.35 });
+    const t = d.targets[0];
+    const r = d.resolveDrop({ lat: t.lat + 3, lon: t.lon })!;
+    expect(r.hit).toBe(false);
+    expect(r.distanceKm).toBeGreaterThan(300);
+    expect(d.delivered).toBe(0);
   });
 });

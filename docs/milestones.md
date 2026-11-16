@@ -8,7 +8,8 @@ The full game plan (eras, company, endgame, monetization) lives in the design do
 | **M0 Foundation** | Monorepo, Next.js shell, client-only game canvas, data pipeline | Done |
 | **M1 Flight on a real Earth** | Real elevation, coastlines, lakes, rivers; atmosphere; day/night; flyable plane; landmarks | Done (first pass) |
 | **M1.5 Sharper Earth** | High-resolution terrain near the plane, clouds | Done |
-| **M2 First delivery** | Letters, balloon marker, parachute drop, stamp, home airfield | Next |
+| **M1.6 Flight UI** | Geographical Adventures-style HUD and camera; first delivery loop | Done |
+| **M2 First delivery** | Letters, stamps, home airfield, Atlas (the drop loop already exists) | Next |
 | **M3 Feel polish** | Sound, wind, Blender aircraft + first landmark models, settings, perf pass | Planned |
 | Gate | "Flying feels great": testers keep flying 5+ minutes unprompted | |
 
@@ -33,8 +34,19 @@ The full game plan (eras, company, endgame, monetization) lives in the design do
 - Vertical exaggeration lowered from ×12 to ×8 now that slopes are resolved.
 - **Clouds**: procedural drifting layer at 3,200 m with climate-like latitude bands, sun-lit with self-shadowing, cloud shadows on the ground, dimming city lights; grazing views fade to avoid an edge-on white band.
 
+## M1.6: Flight UI (Geographical Adventures style)
+
+- Globe view removed; one high chase camera that shows the curve of the Earth, wider field of view when boosting.
+- Plane cruises at 9,000 m and faster (cruise 5 u/s, boost 12 u/s); boost runs on an energy bar that drains and refills.
+- HUD rebuilt with no panels: three destinations across the top (country, city, direction arrow), a boost/speed dial with the run timer (bottom left), and a compass dial with turning N/E/S/W letters (bottom right). Delivery messages appear briefly; a controls hint fades out by itself.
+- Everything else (altitude, coordinates, fps, streaming, "Fly to" landmark menu) moved to a developer overlay on the backtick key.
+- Delivery loop: game-core `Deliveries` picks three well-separated destinations (capitals and cities over 1 million), a striped hot-air balloon floats over each, and **Space** drops a parcel that keeps some of the plane's speed, opens a parachute and drifts down. Landing within 80 km of a destination delivers it and opens a new one. Covered by unit tests and an in-browser check.
+- Atmosphere retuned (thicker, same overall optical depth) so the sky stays blue at cruising altitude.
+
 ## Known issues to pick up
 
+- Balloons use colour stripes; flags (as in Geographical Adventures) need flag art.
+- No sounds yet for drops and deliveries.
 - Restored summits are smooth cones; regions like the Himalaya would benefit from ETOPO 2022 15″ tiles.
 - Clouds are a flat layer (no volume when flying through); the volumetric version comes with weather in a later milestone.
 - Arid plateaus (e.g. Colorado Plateau) read too pale; land colours need a red-rock or arid palette.

@@ -10,7 +10,8 @@ docs/                  geodata, blender pipeline, milestones
 
 ## Principles
 
-- **Next.js is the website around the game, not the game.** `/play` loads the engine with `dynamic(..., { ssr: false })`. The frame loop never touches React state; the engine pushes a HUD snapshot to a Zustand store about 10 times a second.
+- **Next.js is the website around the game, not the game.** `/play` loads the engine with `dynamic(..., { ssr: false })`. The frame loop never touches React state; the engine pushes a HUD snapshot to a Zustand store about 10 times a second, and one-off game events (delivered, missed) through `onEvent`.
+- **UI follows Geographical Adventures:** no panels in flight. Destinations on top, boost dial and timer bottom left, compass bottom right. Developer readouts live behind the backtick key.
 - **Game logic doesn't depend on rendering.** `game-core` has no DOM or WebGL code and runs in Node for tests. It uses three.js only for vector maths.
 - **Real metres everywhere** except the final vertical exaggeration at render time (see geodata.md).
 - **Data is baked, not computed at runtime.** Anything that can be precomputed (masks, lake levels, peak heights, city elevations) is done in the pipeline.
@@ -27,7 +28,8 @@ docs/                  geodata, blender pipeline, milestones
 | Atmosphere | `shaders/chunks.ts`, `Sky.ts`, `atmosphereParams.ts` | Rayleigh + Mie single scattering, 8 view samples, 4 sun samples; shared by sky and terrain (aerial perspective) |
 | Plane | `Plane.ts` | Placeholder model and ribbon trails |
 | Landmarks | `Landmarks.ts` | Placeholders by kind, optional glTF, beams, CSS2D labels near the camera |
-| Input | `Input.ts` | Keyboard and gamepad, eased |
+| Input | `Input.ts` | Keyboard and gamepad, eased; Space/A drops a parcel |
+| Deliveries | game-core `deliveries.ts`, globe `Balloons.ts`, `Parcels.ts` | Destinations, balloons over them, parachute parcels; landing point decides the delivery |
 
 Renderer choice: WebGL 2 + GLSL for the prototype, with a logarithmic depth buffer (near 0.004, far 20,000
 units). The WebGPU/TSL port is planned for the M3 performance pass.
@@ -42,4 +44,4 @@ units). The WebGPU/TSL port is planned for the M3 performance pass.
 
 - `pnpm test` runs the game-core unit tests.
 - `pnpm typecheck` and `pnpm build`.
-- Visual checks: render `/play` in headless Chrome (SwiftShader) and call `window.__postmark.debugView(lat, lon, aglM, headingDeg, utcHours)` to frame a location and time of day.
+- Visual checks: render `/play` in headless Chrome (SwiftShader) and call `window.__postmark.debugView(lat, lon, altitudeM, headingDeg, utcHours)` to frame a location and time of day.
