@@ -40,7 +40,7 @@ All rasters are **equirectangular**: x = longitude −180° → +180°, y = lati
 | `tiles-8.json` | | Fine tile manifest, incl. the region list |
 | `surface.png` | 8192 × 4096 RGBA | Anti-aliased masks: R land, G lake, B river, A ice |
 | `coast.png` | 8192 × 4096 L | Signed distance to the sea coast: `km = (v − 128) × 0.5`, positive at sea (±64 km). Drives surf lines, shallows and beaches. |
-| `aux.png` | 4096 × 2048 RGB | R city lights, G desert, B reserved |
+| `extras.png` | 4096 × 2048 RGB | R city lights, G desert, B reserved |
 | `cities.json` | 2,000 entries | name, country, lat/lon, population, capital flag, elevation |
 | `landmarks.json` | 43 entries | landmark data plus ground elevation sampled from the DEM |
 | `meta.json` | | sizes, encodings, sources, bake statistics |

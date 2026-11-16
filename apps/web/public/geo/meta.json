@@ -41,7 +41,7 @@
   "decode": "km = (v - 128) * 0.5; > 0 at sea"
  },
  "aux": {
-  "file": "aux.png",
+  "file": "extras.png",
   "width": 4096,
   "height": 2048,
   "channels": {
