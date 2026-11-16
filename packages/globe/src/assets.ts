@@ -28,6 +28,7 @@ export interface GeoAssets {
   heightTexture: Texture;
   surfaceTexture: Texture;
   auxTexture: Texture;
+  coastTexture: Texture;
   landmarks: Landmark[];
   cities: City[];
   tiles: TileManifest | null;
@@ -102,9 +103,10 @@ export async function loadGeoAssets(base: string, renderer: WebGLRenderer, progr
   heightTexture.needsUpdate = true;
 
   progress("Loading coastlines, lakes and rivers", 0.6);
-  const [surfaceBmp, auxBmp] = await Promise.all([
+  const [surfaceBmp, auxBmp, coastBmp] = await Promise.all([
     fetchBitmap(`${base}/surface.png`, Math.min(maxTex, 8192)),
     fetchBitmap(`${base}/aux.png`, Math.min(maxTex, 4096)),
+    fetchBitmap(`${base}/coast.png`, Math.min(maxTex, 8192)),
   ]);
   progress("Preparing the world", 0.9);
   return {
@@ -113,6 +115,7 @@ export async function loadGeoAssets(base: string, renderer: WebGLRenderer, progr
     heightTexture,
     surfaceTexture: colourTexture(surfaceBmp),
     auxTexture: colourTexture(auxBmp),
+    coastTexture: colourTexture(coastBmp),
     landmarks,
     cities,
     tiles,

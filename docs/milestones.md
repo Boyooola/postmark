@@ -9,6 +9,7 @@ The full game plan (eras, company, endgame, monetization) lives in the design do
 | **M1 Flight on a real Earth** | Real elevation, coastlines, lakes, rivers; atmosphere; day/night; flyable plane; landmarks | Done (first pass) |
 | **M1.5 Sharper Earth** | High-resolution terrain near the plane, clouds | Done |
 | **M1.6 Flight UI** | Geographical Adventures-style HUD and camera; first delivery loop | Done |
+| **M1.7 Look pass** | Geographical Adventures colours, rugged relief, ocean waves and surf, Blender plane | Done |
 | **M2 First delivery** | Letters, stamps, home airfield, Atlas (the drop loop already exists) | Next |
 | **M3 Feel polish** | Sound, wind, Blender aircraft + first landmark models, settings, perf pass | Planned |
 | Gate | "Flying feels great": testers keep flying 5+ minutes unprompted | |
@@ -43,8 +44,17 @@ The full game plan (eras, company, endgame, monetization) lives in the design do
 - Delivery loop: game-core `Deliveries` picks three well-separated destinations (capitals and cities over 1 million), a striped hot-air balloon floats over each, and **Space** drops a parcel that keeps some of the plane's speed, opens a parachute and drifts down. Landing within 80 km of a destination delivers it and opens a new one. Covered by unit tests and an in-browser check.
 - Atmosphere retuned (thicker, same overall optical depth) so the sky stays blue at cruising altitude.
 
+## M1.7: Look pass
+
+- Terrain palette reworked to muted natural tones: dark forest and green lowlands, steppe and sand in dry belts, red rock on arid highlands, grey-brown rock with lighter crests, snow above a latitude-dependent snowline.
+- Rugged relief: domain-warped ridged multifractal detail on mountains (normals only), with ambient occlusion in gullies and stronger, lower-ambient sunlight.
+- Ocean: colour by real depth, five travelling wave trains plus ripples, sun glitter, darker sky reflection, and white surf bands rolling in along every coast from a baked coastline distance field (`coast.png`). Thin beaches on low coasts.
+- Less haze at cruising altitude; clouds off by default.
+- The player's plane is now a Blender model (`tools/blender/mailplane.blend` to `mailplane.glb`), with a code placeholder as fallback.
+
 ## Known issues to pick up
 
+- Mountain detail is procedural, not real erosion; real high-resolution normal maps (ETOPO 15″ / Copernicus) would be the next step for exact ridgelines.
 - Balloons use colour stripes; flags (as in Geographical Adventures) need flag art.
 - No sounds yet for drops and deliveries.
 - Restored summits are smooth cones; regions like the Himalaya would benefit from ETOPO 2022 15″ tiles.

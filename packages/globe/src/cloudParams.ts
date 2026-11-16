@@ -6,7 +6,8 @@ export const CLOUD_ALTITUDE_M = 3200;
 export function createCloudUniforms() {
   return {
     uCloudTime: { value: 0 },
-    uCloudCover: { value: 0.55 },
+    // Off by default to match the clear Geographical Adventures look; weather can turn it up.
+    uCloudCover: { value: 0 },
   };
 }
 export type CloudUniforms = ReturnType<typeof createCloudUniforms>;

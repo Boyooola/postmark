@@ -33,6 +33,7 @@ All rasters are **equirectangular**: x = longitude −180° → +180°, y = lati
 | `tiles/6/X_Y.webp` | 1,195 tiles of 256 × 256, 49 MB total | Detail elevation (~2.4 km/px), Terrarium, lossless WebP. Only tiles touching land; open ocean uses the base. |
 | `tiles.json` | | Tile manifest: level, size, grid, list of tiles present |
 | `surface.png` | 8192 × 4096 RGBA | Anti-aliased masks: R land, G lake, B river, A ice |
+| `coast.png` | 8192 × 4096 L | Signed distance to the sea coast: `km = (v − 128) × 0.5`, positive at sea (±64 km). Drives surf lines, shallows and beaches. |
 | `aux.png` | 4096 × 2048 RGB | R city lights, G desert, B reserved |
 | `cities.json` | 2,000 entries | name, country, lat/lon, population, capital flag, elevation |
 | `landmarks.json` | 43 entries | landmark data plus ground elevation sampled from the DEM |
@@ -99,10 +100,11 @@ matches what you see) use the exaggerated heights.
 | Real data | Stylized |
 | --- | --- |
 | Continents, coastlines, islands, lakes, rivers, ice | Land colours (from latitude, elevation, slope, deserts) |
-| Terrain at ~2.4 km near the plane, ~9.8 km elsewhere | Shading detail below ~2 km (procedural normals only, geometry untouched) |
-| Ocean depth and colour by depth | Night-light points when flying low |
+| Terrain at ~2.4 km near the plane, ~9.8 km elsewhere | Relief detail below ~2 km: domain-warped ridged noise ("erosion"), shading only, strongest on mountains, faded per octave so it never shimmers |
+| Ocean depth and colour by depth; coastline distance | Waves, sun glitter and surf bands (animated, procedural) |
+| | Night-light points when flying low |
 | Summit heights of listed peaks | Snowline (latitude-based curve) |
-| Positions of cities and landmarks | Clouds (procedural, climate-like latitude bands, not real weather) |
+| Positions of cities and landmarks | Clouds (procedural, off by default) |
 
 ## Known limits and next steps
 

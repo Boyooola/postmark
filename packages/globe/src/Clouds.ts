@@ -50,7 +50,7 @@ void main() {
   // Fade out right in front of the camera so flying through is not a flat wall.
   // A thin layer seen edge-on would read as a hard white band: fade grazing views.
   float grazing = abs(dot(toFrag / dist, dir));
-  float alpha = dens * 0.92 * smoothstep(0.08, 0.9, dist) * smoothstep(0.02, 0.22, grazing);
+  float alpha = dens * 0.75 * smoothstep(0.08, 0.9, dist) * smoothstep(0.02, 0.22, grazing);
   gl_FragColor = vec4(col * alpha, alpha);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>

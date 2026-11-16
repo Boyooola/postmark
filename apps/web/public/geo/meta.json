@@ -1,5 +1,5 @@
 {
- "bakedAt": "2026-11-16T02:17:01+00:00",
+ "bakedAt": "2026-11-16T02:53:29+00:00",
  "projection": "equirectangular; x: lon -180..180, y: lat 90..-90, pixel centres",
  "height": {
   "file": "height.png",
@@ -33,6 +33,12 @@
    "b": "river",
    "a": "ice"
   }
+ },
+ "coast": {
+  "file": "coast.png",
+  "width": 8192,
+  "height": 4096,
+  "decode": "km = (v - 128) * 0.5; > 0 at sea"
  },
  "aux": {
   "file": "aux.png",

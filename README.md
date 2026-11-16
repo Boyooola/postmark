@@ -7,8 +7,8 @@ across real mountains, coastlines and lakes, and grow it across a century of fli
 
 | | |
 | --- | --- |
-| ![Cruising over the Alps](docs/images/hud-alps.jpg) | ![Target balloon over Bratislava](docs/images/hud-balloon.jpg) |
-| ![Sunset over Aconcagua](docs/images/andes-sunset.jpg) | ![Norwegian fjords](docs/images/fjords.jpg) |
+| ![Cruising over the Alps](docs/images/hud-alps.jpg) | ![Greek islands with surf](docs/images/greece.jpg) |
+| ![The Karakoram](docs/images/karakoram.jpg) | ![Target balloon over Bratislava](docs/images/hud-balloon.jpg) |
 
 ## Run it
 

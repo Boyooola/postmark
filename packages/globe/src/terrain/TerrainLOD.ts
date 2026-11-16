@@ -39,6 +39,7 @@ export interface TerrainTextures {
   detail: Texture;
   surface: Texture;
   aux: Texture;
+  coast: Texture;
 }
 
 export interface TerrainOptions {
@@ -122,6 +123,10 @@ export class TerrainLOD {
         uHeight: { value: tex.height },
         uSurface: { value: tex.surface },
         uAux: { value: tex.aux },
+        uCoast: { value: tex.coast },
+        uTime: { value: 0 },
+        uPixelAngle: { value: 0.0015 },
+        uRelief: { value: 1 },
         uDetail: { value: tex.detail },
         uDetailRect: { value: new Vector4(0, 0, 1, 0) },
         uDetailFade: { value: DETAIL_EDGE_FADE },
@@ -129,8 +134,8 @@ export class TerrainLOD {
         uElevScale: { value: elevationToUnits(1) },
         uSkirt: { value: 0.02 * WORLD_RADIUS },
         uCamPos: { value: new Vector3() },
-        uHaze: { value: 0.5 },
-        uInscatter: { value: 0.42 },
+        uHaze: { value: 0.3 },
+        uInscatter: { value: 0.14 },
         uNightLights: { value: 0.9 },
       },
     });
@@ -142,6 +147,12 @@ export class TerrainLOD {
   setDetailWindow(w: DetailWindow) {
     (this.material.uniforms.uDetailRect.value as Vector4).set(w.lon0, w.lat0, w.spanDeg, 1);
     (this.material.uniforms.uStepRad.value as Vector2).y = ((w.spanDeg / w.size) * Math.PI) / 180;
+  }
+
+  /** Per-frame values: animation time and the size of a screen pixel (for anti-aliasing). */
+  setFrame(time: number, viewportHeightPx: number, camera: PerspectiveCamera) {
+    this.material.uniforms.uTime.value = time;
+    this.material.uniforms.uPixelAngle.value = (2 * Math.tan((camera.fov * Math.PI) / 360)) / Math.max(1, viewportHeightPx);
   }
 
   /** Re-select chunks for this camera. Cheap enough to run every frame. */

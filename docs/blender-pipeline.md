@@ -43,11 +43,18 @@ Aircraft follow the same rules with these differences:
 - Name the propeller object `propeller` (spun by the game), and add empties named `wingtip_left` and `wingtip_right` for the vapour trails and navigation lights.
 - Origin at the centre of mass.
 
-The placeholder mail plane is built in code in `packages/globe/src/Plane.ts`. Replacing it with a glTF is
-an M3 task.
+**The mail plane exists:** `tools/blender/mailplane.blend` (source) exported to
+`apps/web/public/models/aircraft/mailplane.glb` (67 KB, 30 parts, 8 materials). It is a yellow high-wing
+monoplane about 8 m long with an 11 m span: red cowling, wingtips and fin, struts, fixed gear, blue cabin
+glass, and emissive navigation lights (red left, green right). The game fits it to its gameplay size by its
+bounding box, so keep it in real metres. If the file fails to load, a placeholder built in
+`packages/globe/src/Plane.ts` flies instead.
+
+To change it: open the `.blend`, edit the `PostmarkMailPlane` collection, select everything in it except
+`PM_PreviewCam` and `PM_Sun`, and export with the settings above to the same path.
 
 ## Using Blender with Claude
 
-The Claude desktop app can drive Blender on your machine through its Blender connection. A good workflow:
-ask Claude to block out a landmark with these rules, review it in Blender, then export with the settings
-above.
+The Claude desktop app can drive Blender on your machine through its Blender connection; the mail plane was
+built that way (Python in Blender, preview renders, glTF export). A good workflow for landmarks: ask Claude
+to block one out with these rules, review it in Blender, then export with the settings above.

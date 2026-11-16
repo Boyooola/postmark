@@ -29,7 +29,7 @@ import { loadGeoAssets, type GeoAssets, type Progress } from "./assets";
 import { createAtmosphereUniforms } from "./atmosphereParams";
 import { Input, type ActionKey } from "./Input";
 import { Landmarks } from "./Landmarks";
-import { Trail, createPlaneModel } from "./Plane";
+import { Trail, createPlaneModel, loadPlaneModel, type PlaneModel } from "./Plane";
 import { Sky } from "./Sky";
 import { Clouds } from "./Clouds";
 import { createCloudUniforms } from "./cloudParams";
@@ -81,6 +81,8 @@ export interface EngineOptions {
   onEvent?: (e: GameEvent) => void;
   onAction?: (a: ActionKey) => void;
   start?: { lat: number; lon: number; headingDeg: number; altitudeM?: number; utcHours?: number };
+  /** glTF of the player's plane (default /models/aircraft/mailplane.glb) */
+  planeUrl?: string;
 }
 
 /** Chase camera, Geographical Adventures style: high and behind, so the curve of the Earth shows. */
@@ -109,7 +111,7 @@ export class Engine {
   private cloudUniforms = createCloudUniforms();
   private landmarks!: Landmarks;
   private flight!: FlightModel;
-  private plane = createPlaneModel();
+  private plane: PlaneModel = createPlaneModel();
   private trails = [new Trail(160, 0.0045 * PLANE_SCALE), new Trail(160, 0.0045 * PLANE_SCALE)];
   private deliveries!: Deliveries;
   private balloons!: Balloons;
@@ -180,12 +182,14 @@ export class Engine {
         detail: this.detail?.texture ?? this.assets.heightTexture,
         surface: this.assets.surfaceTexture,
         aux: this.assets.auxTexture,
+        coast: this.assets.coastTexture,
       },
       atmo,
       this.cloudUniforms,
     );
     this.sky = new Sky(atmo);
     this.clouds = new Clouds(atmo, this.cloudUniforms);
+    this.clouds.mesh.visible = this.cloudUniforms.uCloudCover.value > 0;
     this.landmarks = new Landmarks(this.assets.landmarks, surface);
     this.flight = new FlightModel(surface);
     this.deliveries = new Deliveries(this.assets.cities);
@@ -210,6 +214,15 @@ export class Engine {
     this.snapCamera();
     this.deliveries.start(s);
     this.balloons.sync(this.deliveries.targets);
+
+    // Swap in the Blender model when it arrives (the placeholder flies meanwhile).
+    void loadPlaneModel(`${opts.planeUrl ?? "/models/aircraft/mailplane.glb"}`).then((model) => {
+      if (!model || this.disposed) return;
+      this.scene.remove(this.plane.root);
+      model.root.scale.setScalar(PLANE_SCALE);
+      this.plane = model;
+      this.scene.add(model.root);
+    });
 
     opts.onProgress?.("Ready", 1);
     // Compile shaders before the first frame to avoid a hitch.
@@ -270,6 +283,7 @@ export class Engine {
   /** 0 = clear skies, 1 = overcast. */
   setCloudCover(c: number) {
     this.cloudUniforms.uCloudCover.value = Math.max(0, Math.min(1, c));
+    if (this.clouds) this.clouds.mesh.visible = this.cloudUniforms.uCloudCover.value > 0;
   }
 
   setPaused(p: boolean) {
@@ -316,6 +330,7 @@ export class Engine {
     this.updatePlane(t);
     this.updateChaseCamera(dt);
 
+    this.terrain.setFrame(t, this.renderer.domElement.height, this.camera);
     this.terrain.update(this.camera);
     this.sky.update(this.camera.position, this.sun);
     this.clouds.update(this.camera.position);
@@ -446,6 +461,7 @@ export class Engine {
     this.assets?.heightTexture.dispose();
     this.assets?.surfaceTexture.dispose();
     this.assets?.auxTexture.dispose();
+    this.assets?.coastTexture.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
     this.labels.domElement.remove();
