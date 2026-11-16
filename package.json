@@ -1,0 +1,18 @@
+{
+  "name": "postmark",
+  "private": true,
+  "description": "Postmark: a cozy airmail flying game on a real Earth.",
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=20.9"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @postmark/web dev",
+    "build": "pnpm --filter @postmark/web build",
+    "start": "pnpm --filter @postmark/web start",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "geo:fetch": "bash tools/geo-pipeline/fetch_sources.sh",
+    "geo:bake": "python3 tools/geo-pipeline/bake.py"
+  }
+}

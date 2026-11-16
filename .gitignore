@@ -1,0 +1,18 @@
+node_modules/
+.next/
+out/
+dist/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+.env*
+!.env.example
+.DS_Store
+.vercel
+
+# raw geo sources are downloaded by tools/geo-pipeline/fetch_sources.sh
+tools/geo-pipeline/raw/
+__pycache__/
+
+# local screenshots from verification runs
+.screens/

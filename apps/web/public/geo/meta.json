@@ -1,0 +1,95 @@
+{
+ "bakedAt": "2026-11-16T01:18:11+00:00",
+ "projection": "equirectangular; x: lon -180..180, y: lat 90..-90, pixel centres",
+ "height": {
+  "file": "height.png",
+  "width": 4096,
+  "height": 2048,
+  "encoding": "terrarium",
+  "decode": "elevation_m = R*256 + G + B/256 - 32768",
+  "verticalDatum": "mean sea level",
+  "minM": -10334,
+  "maxM": 8892,
+  "source": "ETOPO1 Ice Surface, 10 arc-minute resample"
+ },
+ "surface": {
+  "file": "surface.png",
+  "width": 8192,
+  "height": 4096,
+  "channels": {
+   "r": "land",
+   "g": "lake",
+   "b": "river",
+   "a": "ice"
+  }
+ },
+ "aux": {
+  "file": "aux.png",
+  "width": 4096,
+  "height": 2048,
+  "channels": {
+   "r": "cityLights",
+   "g": "desert",
+   "b": "reserved"
+  }
+ },
+ "stats": {
+  "lakes": 3743,
+  "cities": 2000,
+  "landmarks": 43,
+  "peaks": [
+   {
+    "id": "matterhorn",
+    "before": 2467,
+    "after": 4474
+   },
+   {
+    "id": "kilimanjaro",
+    "before": 3445,
+    "after": 5894
+   },
+   {
+    "id": "table-mountain",
+    "before": 6,
+    "after": 1084
+   },
+   {
+    "id": "everest",
+    "before": 5537,
+    "after": 8847
+   },
+   {
+    "id": "mount-fuji",
+    "before": 1198,
+    "after": 3775
+   },
+   {
+    "id": "mayon-volcano",
+    "before": 174,
+    "after": 2460
+   },
+   {
+    "id": "aconcagua",
+    "before": 4887,
+    "after": 6960
+   },
+   {
+    "id": "denali",
+    "before": 2576,
+    "after": 6188
+   }
+  ]
+ },
+ "sources": [
+  {
+   "name": "ETOPO1 Ice Surface, 10 arc-minute resample",
+   "by": "NOAA NCEI (via pyvista/vtk-data)",
+   "licence": "Public domain (US Government)"
+  },
+  {
+   "name": "Natural Earth 1:10m vectors",
+   "by": "naturalearthdata.com",
+   "licence": "Public domain"
+  }
+ ]
+}

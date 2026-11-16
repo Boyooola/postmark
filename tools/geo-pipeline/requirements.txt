@@ -1,0 +1,5 @@
+numpy>=2.0
+scipy>=1.13
+pillow>=11.0
+vtk>=9.3          # reads the ETOPO .vtp grid
+tifffile>=2024.1  # optional: only needed for an ETOPO 2022 GeoTIFF drop-in
