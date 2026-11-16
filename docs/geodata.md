@@ -129,7 +129,7 @@ matches what you see) use the exaggerated heights.
 ## Known limits and next steps
 
 - **More fine regions:** add a box to `REGIONS` in `bake_detail.py`. Covering all land at level 8 would be roughly 600–800 MB.
-- **Hosting:** ~95 MB of tiles live in git for now. Before launch, move `tiles/` to object storage plus a CDN and keep only the bake in the repo.
+- **Hosting:** ~500 MB of tiles live in git for now (levels 6, 8 and 10). Before launch, move `tiles/` to object storage plus a CDN and keep only the bake in the repo.
 - Restored summits are smooth cones; the real ridgelines need finer data.
 - The night-light texture is a proxy, not satellite night imagery. Clouds are a single procedural layer, not real weather.
 - Country borders are deliberately not drawn (see the design plan's risk table).
