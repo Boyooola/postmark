@@ -11,46 +11,66 @@ import {
   WebGLRenderer,
 } from "three";
 import { CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import {
+  Deliveries,
+  FLIGHT,
   FlightModel,
-  WORLD_RADIUS,
+  TerrainHeights,
+  bearingDeg,
+  distanceKm,
   latLonToDirection,
   nearest,
-  type City,
+  type DropResult,
   type FlightTelemetry,
   type Landmark,
+  type LatLon,
 } from "@postmark/game-core";
 import { loadGeoAssets, type GeoAssets, type Progress } from "./assets";
 import { createAtmosphereUniforms } from "./atmosphereParams";
 import { Input, type ActionKey } from "./Input";
 import { Landmarks } from "./Landmarks";
-import { Trail, createPlaneModel } from "./Plane";
+import { Trail, createPlaneModel, loadPlaneModel, type PlaneModel } from "./Plane";
 import { Sky } from "./Sky";
+import { Clouds } from "./Clouds";
+import { createCloudUniforms } from "./cloudParams";
 import { TerrainLOD } from "./terrain/TerrainLOD";
+import { Balloons } from "./Balloons";
+import { Parcels } from "./Parcels";
+import { DetailTerrain } from "./terrain/DetailTerrain";
 
-export type CameraMode = "chase" | "orbit";
+export interface HudTarget {
+  city: string;
+  country: string;
+  distanceKm: number;
+  /** direction relative to the plane's heading, -180..180 (0 = straight ahead) */
+  relativeDeg: number;
+}
 
 export interface NearestInfo {
   name: string;
   detail: string;
   distanceKm: number;
-  bearingDeg: number;
-  /** bearing relative to the plane's heading, -180..180 (0 = straight ahead) */
   relativeDeg: number;
 }
 
 export interface HudState {
   telemetry: FlightTelemetry;
+  targets: HudTarget[];
+  delivered: number;
+  /** seconds since the run started */
+  elapsedS: number;
+  /** developer overlay only */
   landmark: NearestInfo | null;
-  city: NearestInfo | null;
-  /** local solar time at the plane, "HH:MM" */
   localTime: string;
   timeScale: number;
-  cameraMode: CameraMode;
   fps: number;
   chunks: number;
+  streaming: boolean;
 }
+
+export type GameEvent =
+  | { type: "delivered"; city: string; country: string; distanceKm: number; delivered: number }
+  | { type: "missed"; city: string; country: string; distanceKm: number };
 
 export interface EngineOptions {
   container: HTMLElement;
@@ -58,11 +78,18 @@ export interface EngineOptions {
   assetBase: string;
   onProgress?: Progress;
   onHud?: (s: HudState) => void;
+  onEvent?: (e: GameEvent) => void;
   onAction?: (a: ActionKey) => void;
-  start?: { lat: number; lon: number; headingDeg: number; aglM?: number; utcHours?: number };
+  start?: { lat: number; lon: number; headingDeg: number; altitudeM?: number; utcHours?: number };
+  /** glTF of the player's plane (default /models/aircraft/mailplane.glb) */
+  planeUrl?: string;
 }
 
-const DEFAULT_START = { lat: 46.45, lon: 7.35, headingDeg: 150, aglM: 2200, utcHours: 14.6 };
+/** Chase camera, Geographical Adventures style: high and behind, so the curve of the Earth shows. */
+const CAMERA = { back: 2.7, up: 1.15, lookAhead: 3.2, lookUp: 0.15, fov: 62, boostFov: 74 };
+const PLANE_SCALE = 2.5;
+
+const DEFAULT_START = { lat: 47.2, lon: 6.6, headingDeg: 140, altitudeM: FLIGHT.cruiseAltitudeM, utcHours: 14.6 };
 const SUN_DECLINATION_DEG = 12;
 
 export class Engine {
@@ -70,7 +97,6 @@ export class Engine {
   readonly scene = new Scene();
   readonly camera: PerspectiveCamera;
   private labels: CSS2DRenderer;
-  private orbit: OrbitControls;
   private input: Input;
   private timer = new Timer();
   private raf = 0;
@@ -78,19 +104,27 @@ export class Engine {
 
   private assets!: GeoAssets;
   private terrain!: TerrainLOD;
+  private heights!: TerrainHeights;
+  private detail: DetailTerrain | null = null;
+  private fine: DetailTerrain | null = null;
   private sky!: Sky;
+  private clouds!: Clouds;
+  private cloudUniforms = createCloudUniforms();
   private landmarks!: Landmarks;
   private flight!: FlightModel;
-  private plane = createPlaneModel();
-  private trails = [new Trail(), new Trail()];
+  private plane: PlaneModel = createPlaneModel();
+  private trails = [new Trail(160, 0.0045 * PLANE_SCALE), new Trail(160, 0.0045 * PLANE_SCALE)];
+  private deliveries!: Deliveries;
+  private balloons!: Balloons;
+  private parcels!: Parcels;
+  private runTime = 0;
   private sun = new Vector3();
   private sunLight = new DirectionalLight(0xffffff, 3);
   private hemi = new HemisphereLight(0xbfd8ff, 0x3a3020, 0.6);
 
   private utcHours = DEFAULT_START.utcHours;
   timeScale = 60; // game seconds per real second (1 day = 24 min)
-  cameraMode: CameraMode = "chase";
-  private lastSpawn = { ...DEFAULT_START };
+  private lastSpawn: { lat: number; lon: number; headingDeg: number; altitudeM: number; utcHours: number } = { ...DEFAULT_START };
   private hudTimer = 0;
   private frames = 0;
   private fpsTimer = 0;
@@ -113,13 +147,8 @@ export class Engine {
     Object.assign(this.labels.domElement.style, { position: "absolute", inset: "0", pointerEvents: "none" });
     container.appendChild(this.labels.domElement);
 
-    this.camera = new PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.004, 20000);
-    this.orbit = new OrbitControls(this.camera, this.renderer.domElement);
-    this.orbit.enabled = false;
-    this.orbit.minDistance = WORLD_RADIUS * 1.08;
-    this.orbit.maxDistance = WORLD_RADIUS * 6;
-    this.orbit.enablePan = false;
-    this.orbit.rotateSpeed = 0.4;
+    this.camera = new PerspectiveCamera(CAMERA.fov, container.clientWidth / container.clientHeight, 0.01, 20000);
+    this.plane.root.scale.setScalar(PLANE_SCALE);
 
     this.input = new Input();
     this.input.onAction((a) => this.handleAction(a));
@@ -138,22 +167,84 @@ export class Engine {
     this.assets = await loadGeoAssets(opts.assetBase, this.renderer, opts.onProgress);
     if (this.disposed) return;
     const atmo = createAtmosphereUniforms(this.sun);
+    this.heights = new TerrainHeights(this.assets.heights);
+    const surface = (lat: number, lon: number) => this.heights.surface(lat, lon);
 
+    if (this.assets.tiles) {
+      this.detail = new DetailTerrain(opts.assetBase, this.assets.tiles, this.heights, this.assets.floatLinear, (w) => {
+        if (w) this.terrain?.setDetailWindow(w);
+        this.landmarks?.reposition();
+      });
+    }
+    if (this.assets.tilesFine) {
+      // ~610 m terrain where it exists (mountain regions); off elsewhere.
+      this.fine = new DetailTerrain(
+        opts.assetBase,
+        this.assets.tilesFine,
+        this.heights,
+        this.assets.floatLinear,
+        (w) => {
+          this.terrain?.setFineWindow(w);
+          this.landmarks?.reposition();
+        },
+        (lat, lon) => this.heights.sample(lat, lon, 1),
+        (w) => (this.heights.fine = w),
+        true,
+      );
+    }
     this.terrain = new TerrainLOD(
-      { height: this.assets.heightTexture, heightSize: this.assets.heights, surface: this.assets.surfaceTexture, aux: this.assets.auxTexture },
+      {
+        height: this.assets.heightTexture,
+        heightSize: this.assets.heights,
+        detail: this.detail?.texture ?? this.assets.heightTexture,
+        fine: this.fine?.texture ?? this.assets.heightTexture,
+        surface: this.assets.surfaceTexture,
+        aux: this.assets.auxTexture,
+        coast: this.assets.coastTexture,
+      },
       atmo,
+      this.cloudUniforms,
     );
     this.sky = new Sky(atmo);
-    this.landmarks = new Landmarks(this.assets.landmarks, this.assets.heights);
-    this.flight = new FlightModel((lat, lon) => this.assets.heights.surface(lat, lon));
+    this.clouds = new Clouds(atmo, this.cloudUniforms);
+    this.clouds.mesh.visible = this.cloudUniforms.uCloudCover.value > 0;
+    this.landmarks = new Landmarks(this.assets.landmarks, surface);
+    this.flight = new FlightModel(surface);
+    this.deliveries = new Deliveries(this.assets.cities);
+    this.balloons = new Balloons(surface);
+    this.parcels = new Parcels(surface, (where) => this.onParcelLanded(where));
 
-    this.scene.add(this.terrain.mesh, this.sky.group, this.landmarks.group, this.plane.root, this.sunLight, this.sunLight.target, this.hemi);
+    this.scene.add(
+      this.terrain.mesh, this.sky.group, this.clouds.mesh, this.landmarks.group, this.balloons.group,
+      this.parcels.group, this.plane.root, this.sunLight, this.sunLight.target, this.hemi,
+    );
     for (const t of this.trails) this.scene.add(t.mesh);
 
     const s = { ...DEFAULT_START, ...opts.start };
     this.utcHours = s.utcHours ?? DEFAULT_START.utcHours;
-    this.spawn(s.lat, s.lon, s.headingDeg, s.aglM);
+    if (this.detail) {
+      opts.onProgress?.("Streaming terrain around you", 0.95);
+      const deg = this.assets.tiles!.degreesPerTile;
+      await this.detail.load((s.lon + 180) / deg, (90 - s.lat) / deg);
+      if (this.fine) {
+        const d8 = this.assets.tilesFine!.degreesPerTile;
+        await this.fine.load((s.lon + 180) / d8, (90 - s.lat) / d8);
+      }
+      if (this.disposed) return;
+    }
+    this.spawn(s.lat, s.lon, s.headingDeg, s.altitudeM);
     this.snapCamera();
+    this.deliveries.start(s);
+    this.balloons.sync(this.deliveries.targets);
+
+    // Swap in the Blender model when it arrives (the placeholder flies meanwhile).
+    void loadPlaneModel(`${opts.planeUrl ?? "/models/aircraft/mailplane.glb"}`).then((model) => {
+      if (!model || this.disposed) return;
+      this.scene.remove(this.plane.root);
+      model.root.scale.setScalar(PLANE_SCALE);
+      this.plane = model;
+      this.scene.add(model.root);
+    });
 
     opts.onProgress?.("Ready", 1);
     // Compile shaders before the first frame to avoid a hitch.
@@ -164,38 +255,47 @@ export class Engine {
     this.loop();
   }
 
+  /** True while a new high-resolution terrain window is loading. */
+  get streaming(): boolean {
+    return (this.detail?.loading ?? false) || (this.fine?.loading ?? false);
+  }
+
   get landmarkList(): Landmark[] {
     return this.assets?.landmarks ?? [];
   }
 
   // ------------------------------------------------------------------ actions
-  spawn(lat: number, lon: number, headingDeg: number, aglM = 2000) {
-    this.lastSpawn = { lat, lon, headingDeg, aglM, utcHours: this.utcHours };
-    this.flight.spawn(lat, lon, headingDeg, aglM);
+  spawn(lat: number, lon: number, headingDeg: number, altitudeM: number = FLIGHT.cruiseAltitudeM) {
+    this.lastSpawn = { lat, lon, headingDeg, altitudeM, utcHours: this.utcHours };
+    this.flight.spawn(lat, lon, headingDeg, altitudeM);
     this.trails.forEach((t) => t.reset());
+    this.detail?.update(lat, lon, true);
+    this.fine?.update(lat, lon, true);
   }
 
-  /** Fly towards a landmark from ~40 km south of it. */
+  /** Developer shortcut: fly towards a landmark from ~250 km south of it. */
   teleportToLandmark(id: string) {
     const lm = this.assets.landmarks.find((l) => l.id === id);
     if (!lm) return;
-    const lat = Math.max(-89, lm.lat - 0.38);
-    const agl = lm.kind === "mountain" ? Math.max(1500, (lm.summitM ?? 0) - this.assets.heights.surface(lat, lm.lon) + 800) : 1400;
-    this.spawn(lat, lm.lon, 0, agl);
-    if (this.cameraMode === "orbit") this.setCameraMode("chase");
+    this.spawn(Math.max(-89, lm.lat - 2.2), lm.lon, 0);
     this.snapCamera();
   }
 
-  setCameraMode(mode: CameraMode) {
-    this.cameraMode = mode;
-    this.orbit.enabled = mode === "orbit";
-    if (mode === "orbit") {
-      this.camera.up.set(0, 1, 0);
-      this.camera.position.copy(this.flight.position).normalize().multiplyScalar(WORLD_RADIUS * 2.6);
-      this.orbit.target.set(0, 0, 0);
-      this.orbit.update();
+  /** Drop a parcel from the plane (Space). */
+  dropParcel() {
+    const p = this.flight.position.clone().addScaledVector(this.flight.position.clone().normalize(), -0.15);
+    this.parcels.drop(p, this.flight.velocity);
+  }
+
+  private onParcelLanded(where: LatLon) {
+    const r: DropResult | null = this.deliveries.resolveDrop(where);
+    if (!r) return;
+    const base = { city: r.target.city, country: r.target.country, distanceKm: r.distanceKm };
+    if (r.hit) {
+      this.balloons.sync(this.deliveries.targets);
+      this.opts.onEvent?.({ type: "delivered", ...base, delivered: this.deliveries.delivered });
     } else {
-      this.snapCamera();
+      this.opts.onEvent?.({ type: "missed", ...base });
     }
   }
 
@@ -203,23 +303,29 @@ export class Engine {
     this.timeScale = Math.max(0, Math.min(3600 * 4, s));
   }
 
+  /** 0 = clear skies, 1 = overcast. */
+  setCloudCover(c: number) {
+    this.cloudUniforms.uCloudCover.value = Math.max(0, Math.min(1, c));
+    if (this.clouds) this.clouds.mesh.visible = this.cloudUniforms.uCloudCover.value > 0;
+  }
+
   setPaused(p: boolean) {
     this.paused = p;
   }
 
   /** Testing / screenshots: put the camera somewhere specific. */
-  debugView(lat: number, lon: number, aglM: number, headingDeg: number, utcHours?: number) {
+  debugView(lat: number, lon: number, altitudeM: number, headingDeg: number, utcHours?: number) {
     if (utcHours !== undefined) this.utcHours = utcHours;
-    this.spawn(lat, lon, headingDeg, aglM);
+    this.spawn(lat, lon, headingDeg, altitudeM);
     this.snapCamera();
   }
 
   private handleAction(a: ActionKey) {
-    if (a === "toggleCamera") this.setCameraMode(this.cameraMode === "chase" ? "orbit" : "chase");
+    if (a === "drop") this.dropParcel();
     if (a === "timeFaster") this.setTimeScale(this.timeScale === 0 ? 60 : this.timeScale * 4);
     if (a === "timeSlower") this.setTimeScale(this.timeScale <= 15 ? 0 : this.timeScale / 4);
     if (a === "respawn") {
-      this.spawn(this.lastSpawn.lat, this.lastSpawn.lon, this.lastSpawn.headingDeg, this.lastSpawn.aglM);
+      this.spawn(this.lastSpawn.lat, this.lastSpawn.lon, this.lastSpawn.headingDeg, this.lastSpawn.altitudeM);
       this.snapCamera();
     }
     this.opts.onAction?.(a);
@@ -234,16 +340,27 @@ export class Engine {
     const t = this.timer.getElapsed();
     if (!this.paused) {
       this.utcHours = (this.utcHours + (dt * this.timeScale) / 3600 + 24) % 24;
+      this.cloudUniforms.uCloudTime.value += dt * Math.max(1, this.timeScale / 60);
       this.flight.update(dt, this.input.read(dt));
+      this.parcels.update(dt);
+      this.runTime += dt;
+    }
+    if (this.detail) {
+      const p = this.flight.telemetry();
+      this.detail.update(p.lat, p.lon);
+      // The fine window waits for the detail window it falls back on.
+      if (!this.detail.loading) this.fine?.update(p.lat, p.lon);
     }
     this.updateSun();
     this.updatePlane(t);
-    if (this.cameraMode === "chase") this.updateChaseCamera(dt);
-    else this.orbit.update();
+    this.updateChaseCamera(dt);
 
+    this.terrain.setFrame(t, this.renderer.domElement.height, this.camera);
     this.terrain.update(this.camera);
     this.sky.update(this.camera.position, this.sun);
+    this.clouds.update(this.camera.position);
     this.landmarks.update(this.camera.position);
+    this.balloons.update(this.camera.position, t);
     this.renderer.render(this.scene, this.camera);
     this.labels.render(this.scene, this.camera);
     this.tickHud(dt);
@@ -278,27 +395,34 @@ export class Engine {
 
   private chaseFwd = new Vector3();
   private chaseUp = new Vector3();
-  private updateChaseCamera(dt: number) {
+  private desired = new Vector3();
+  private lookAt = new Vector3();
+  private chaseTarget(out: Vector3, look: Vector3) {
     const f = this.flight;
     const up = this.chaseUp.copy(f.position).normalize();
-    const fwd = this.chaseFwd.copy(f.heading).multiplyScalar(Math.cos(f.climb)).addScaledVector(up, Math.sin(f.climb)).normalize();
-    const desired = f.position.clone().addScaledVector(fwd, -0.95).addScaledVector(up, 0.26);
-    const k = 1 - Math.exp(-dt * 5);
-    this.camera.position.lerp(desired, k);
+    // Follow the heading, and only a little of the climb, so the horizon stays calm.
+    const fwd = this.chaseFwd.copy(f.heading).multiplyScalar(Math.cos(f.climb * 0.4)).addScaledVector(up, Math.sin(f.climb * 0.4)).normalize();
+    out.copy(f.position).addScaledVector(fwd, -CAMERA.back).addScaledVector(up, CAMERA.up);
+    look.copy(f.position).addScaledVector(fwd, CAMERA.lookAhead).addScaledVector(up, CAMERA.lookUp);
+    return up;
+  }
+
+  private updateChaseCamera(dt: number) {
+    const up = this.chaseTarget(this.desired, this.lookAt);
+    const k = 1 - Math.exp(-dt * 4);
+    this.camera.position.lerp(this.desired, k);
     this.camera.up.copy(up);
-    this.camera.lookAt(f.position.clone().addScaledVector(fwd, 0.7).addScaledVector(up, 0.05));
-    const targetFov = 58 + (f.speed - 2) * 2.2;
-    this.camera.fov += (targetFov - this.camera.fov) * k;
+    this.camera.lookAt(this.lookAt);
+    const targetFov = this.flight.boosting ? CAMERA.boostFov : CAMERA.fov;
+    this.camera.fov += (targetFov - this.camera.fov) * (1 - Math.exp(-dt * 2.5));
     this.camera.updateProjectionMatrix();
   }
 
   private snapCamera() {
-    if (this.cameraMode !== "chase") return;
-    const f = this.flight;
-    const up = f.position.clone().normalize();
-    this.camera.position.copy(f.position).addScaledVector(f.heading, -0.95).addScaledVector(up, 0.26);
+    const up = this.chaseTarget(this.desired, this.lookAt);
+    this.camera.position.copy(this.desired);
     this.camera.up.copy(up);
-    this.camera.lookAt(f.position.clone().addScaledVector(f.heading, 0.7));
+    this.camera.lookAt(this.lookAt);
   }
 
   private tickHud(dt: number) {
@@ -315,30 +439,29 @@ export class Engine {
     const tel = this.flight.telemetry();
     const rel = (b: number) => ((b - tel.headingDeg + 540) % 360) - 180;
     const lm = nearest(tel, this.assets.landmarks);
-    const city = nearest(tel, this.assets.cities, (c: City) => c.pop > 150000 || c.capital);
     const local = (this.utcHours + tel.lon / 15 + 48) % 24;
     const hh = Math.floor(local), mm = Math.floor((local - hh) * 60);
     this.opts.onHud({
       telemetry: tel,
+      targets: this.deliveries.targets.map((t) => ({
+        city: t.city,
+        country: t.country,
+        distanceKm: distanceKm(tel, t),
+        relativeDeg: rel(bearingDeg(tel, t)),
+      })),
+      delivered: this.deliveries.delivered,
+      elapsedS: this.runTime,
       landmark: lm && {
         name: lm.item.name,
         detail: `${lm.item.city}, ${lm.item.country}`,
         distanceKm: lm.distanceKm,
-        bearingDeg: lm.bearingDeg,
         relativeDeg: rel(lm.bearingDeg),
-      },
-      city: city && {
-        name: city.item.name,
-        detail: city.item.country,
-        distanceKm: city.distanceKm,
-        bearingDeg: city.bearingDeg,
-        relativeDeg: rel(city.bearingDeg),
       },
       localTime: `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`,
       timeScale: this.timeScale,
-      cameraMode: this.cameraMode,
       fps: this.fps,
       chunks: this.terrain.chunksDrawn,
+      streaming: this.streaming,
     });
   }
 
@@ -356,12 +479,15 @@ export class Engine {
     window.removeEventListener("resize", this.onResize);
     this.input.dispose();
     this.timer.dispose();
-    this.orbit.dispose();
     this.terrain?.dispose();
+    this.detail?.dispose();
+    this.fine?.dispose();
     this.sky?.dispose();
+    this.clouds?.dispose();
     this.assets?.heightTexture.dispose();
     this.assets?.surfaceTexture.dispose();
     this.assets?.auxTexture.dispose();
+    this.assets?.coastTexture.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
     this.labels.domElement.remove();

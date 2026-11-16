@@ -19,7 +19,6 @@ import {
   WORLD_RADIUS,
   elevationToUnits,
   latLonToDirection,
-  type HeightField,
   type Landmark,
   type LandmarkKind,
 } from "@postmark/game-core";
@@ -29,7 +28,7 @@ import {
  * DISPLAY_SCALE (on top of the terrain's vertical exaggeration) so a 330 m
  * tower is readable from a plane flying at several kilometres.
  */
-export const LANDMARK_DISPLAY_SCALE = 4;
+export const LANDMARK_DISPLAY_SCALE = 6;
 const MIN_HEIGHT_UNITS = 0.35;
 
 const KIND_COLOR: Record<LandmarkKind, number> = {
@@ -111,7 +110,7 @@ export class Landmarks {
   readonly markers: LandmarkMarker[] = [];
   private loader = new GLTFLoader();
 
-  constructor(list: Landmark[], heights: HeightField) {
+  constructor(list: Landmark[], private surfaceM: (lat: number, lon: number) => number) {
     const beamMat = new MeshBasicMaterial({
       color: 0xffe9a8,
       transparent: true,
@@ -121,8 +120,7 @@ export class Landmarks {
     });
     for (const lm of list) {
       const up = latLonToDirection(lm.lat, lm.lon);
-      const groundM = lm.kind === "mountain" && lm.summitM ? lm.summitM : heights.surface(lm.lat, lm.lon);
-      const position = up.clone().multiplyScalar(WORLD_RADIUS + elevationToUnits(groundM));
+      const position = up.clone().multiplyScalar(WORLD_RADIUS + elevationToUnits(this.groundOf(lm)));
       const root = new Group();
       root.position.copy(position);
       root.quaternion.copy(new Quaternion().setFromUnitVectors(new Vector3(0, 1, 0), up));
@@ -135,6 +133,7 @@ export class Landmarks {
       // A soft light beam makes landmarks findable from far away.
       const beam = new Mesh(new CylinderGeometry(0.03, 0.03, 6, 8, 1, true), beamMat);
       beam.position.y = 3 + h;
+      beam.renderOrder = 30;
       root.add(beam);
 
       const el = document.createElement("div");
@@ -149,6 +148,19 @@ export class Landmarks {
 
       this.group.add(root);
       this.markers.push({ landmark: lm, root, label, position });
+    }
+  }
+
+  private groundOf(lm: Landmark) {
+    return lm.kind === "mountain" && lm.summitM ? lm.summitM : this.surfaceM(lm.lat, lm.lon);
+  }
+
+  /** Re-seat markers on the ground after sharper terrain streams in. */
+  reposition() {
+    for (const m of this.markers) {
+      const up = latLonToDirection(m.landmark.lat, m.landmark.lon);
+      m.position.copy(up).multiplyScalar(WORLD_RADIUS + elevationToUnits(this.groundOf(m.landmark)));
+      m.root.position.copy(m.position);
     }
   }
 

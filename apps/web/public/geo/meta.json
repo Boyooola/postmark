@@ -1,5 +1,5 @@
 {
- "bakedAt": "2026-11-16T01:18:11+00:00",
+ "bakedAt": "2026-11-16T04:27:20+00:00",
  "projection": "equirectangular; x: lon -180..180, y: lat 90..-90, pixel centres",
  "height": {
   "file": "height.png",
@@ -8,9 +8,20 @@
   "encoding": "terrarium",
   "decode": "elevation_m = R*256 + G + B/256 - 32768",
   "verticalDatum": "mean sea level",
-  "minM": -10334,
-  "maxM": 8892,
-  "source": "ETOPO1 Ice Surface, 10 arc-minute resample"
+  "minM": -10338,
+  "maxM": 7856,
+  "source": "ETOPO 2022 Ice Surface, 60 arc-second (ETOPO_2022_v1_60s_N90W180_surface.tif)"
+ },
+ "detail": {
+  "manifest": "tiles.json",
+  "width": 16384,
+  "height": 8192,
+  "tileSize": 256,
+  "level": 6,
+  "minM": -10676,
+  "maxM": 8874,
+  "sourceResolutionKm": 1.86,
+  "tiles": 1195
  },
  "surface": {
   "file": "surface.png",
@@ -23,6 +34,12 @@
    "a": "ice"
   }
  },
+ "coast": {
+  "file": "coast.png",
+  "width": 8192,
+  "height": 4096,
+  "decode": "km = (v - 128) * 0.5; > 0 at sea"
+ },
  "aux": {
   "file": "aux.png",
   "width": 4096,
@@ -34,62 +51,106 @@
   }
  },
  "stats": {
-  "lakes": 3743,
+  "lakes": 3791,
+  "peakSigmaKm": 6.0,
   "cities": 2000,
   "landmarks": 43,
   "peaks": [
    {
     "id": "matterhorn",
-    "before": 2467,
-    "after": 4474
+    "before": 3081,
+    "after": 4478
    },
    {
     "id": "kilimanjaro",
-    "before": 3445,
+    "before": 5163,
     "after": 5894
    },
    {
     "id": "table-mountain",
-    "before": 6,
+    "before": 510,
     "after": 1084
    },
    {
     "id": "everest",
-    "before": 5537,
+    "before": 7228,
     "after": 8847
    },
    {
     "id": "mount-fuji",
-    "before": 1198,
+    "before": 2815,
     "after": 3775
    },
    {
     "id": "mayon-volcano",
-    "before": 174,
-    "after": 2460
+    "before": 1188,
+    "after": 2461
    },
    {
     "id": "aconcagua",
-    "before": 4887,
-    "after": 6960
+    "before": 5594,
+    "after": 6959
    },
    {
     "id": "denali",
-    "before": 2576,
-    "after": 6188
+    "before": 5289,
+    "after": 6190
    }
   ]
  },
  "sources": [
   {
-   "name": "ETOPO1 Ice Surface, 10 arc-minute resample",
-   "by": "NOAA NCEI (via pyvista/vtk-data)",
+   "name": "ETOPO 2022 Ice Surface, 60 arc-second (ETOPO_2022_v1_60s_N90W180_surface.tif)",
+   "by": "NOAA NCEI",
    "licence": "Public domain (US Government)"
   },
   {
    "name": "Natural Earth 1:10m vectors",
    "by": "naturalearthdata.com",
    "licence": "Public domain"
+  },
+  {
+   "name": "GEBCO_2026 Grid",
+   "by": "GEBCO Compilation Group (2026)",
+   "licence": "Free to use with acknowledgement (GEBCO terms of use)"
   }
- ]
+ ],
+ "detail8": {
+  "manifest": "tiles-8.json",
+  "tiles": 994,
+  "bytes": 45686384,
+  "source": "GEBCO_2026 Grid (ice surface), 15 arc-second",
+  "peaks": [
+   {
+    "id": "everest",
+    "gebco": 8341,
+    "after": 8849
+   },
+   {
+    "id": "matterhorn",
+    "gebco": 3753,
+    "after": 4478
+   },
+   {
+    "id": "aconcagua",
+    "gebco": 6571,
+    "after": 6961
+   },
+   {
+    "id": "mount-fuji",
+    "gebco": 3543,
+    "after": 3776
+   },
+   {
+    "id": "mayon-volcano",
+    "gebco": 2064,
+    "after": 2463
+   },
+   {
+    "id": "kilimanjaro",
+    "gebco": 5766,
+    "after": 5894
+   }
+  ]
+ }
 }

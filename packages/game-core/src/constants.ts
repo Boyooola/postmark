@@ -12,7 +12,7 @@
 export const EARTH_RADIUS_M = 6_371_000;
 export const WORLD_RADIUS = 1000;
 export const METERS_PER_UNIT = EARTH_RADIUS_M / WORLD_RADIUS; // 6371
-export const VERTICAL_EXAGGERATION = 12;
+export const VERTICAL_EXAGGERATION = 4;
 
 /** Real elevation in metres -> rendered height above the sea-level sphere, in world units. */
 export const elevationToUnits = (meters: number): number =>
@@ -26,23 +26,29 @@ export const unitsToElevation = (units: number): number =>
 export const unitsToKm = (units: number): number => (units * METERS_PER_UNIT) / 1000;
 
 /**
- * Flight tuning. Speeds are in world units per second. The game compresses
- * time: the HUD shows an airspeed that feels right for a small plane rather
- * than the true ground speed (2 u/s would be ~46,000 km/h).
+ * Flight tuning, in the style of Geographical Adventures: the plane cruises
+ * high and fast so the planet's curve and whole mountain ranges are in view.
+ * Speeds are world units per second; time is compressed (the HUD shows a
+ * plausible airspeed, not the true ground speed).
  */
 export const FLIGHT = {
-  cruiseSpeed: 2.0,
-  boostSpeed: 5.5,
-  slowSpeed: 1.0,
-  acceleration: 1.6,
-  turnRate: 0.9, // rad/s at full input
-  pitchRate: 0.9, // rad/s change of climb angle
-  maxClimbAngle: (35 * Math.PI) / 180,
-  maxBankAngle: (45 * Math.PI) / 180,
-  /** minimum clearance above terrain, world units (~ 80 m real at 12x) */
-  minClearance: 0.15,
+  cruiseSpeed: 5.0,
+  boostSpeed: 12.0,
+  slowSpeed: 2.5,
+  acceleration: 4.0,
+  turnRate: 1.1, // rad/s at full input
+  pitchRate: 0.8, // rad/s change of climb angle
+  maxClimbAngle: (30 * Math.PI) / 180,
+  maxBankAngle: (40 * Math.PI) / 180,
+  /** default cruising altitude, real metres above sea level (high, for the big view) */
+  cruiseAltitudeM: 16_000,
+  /** minimum clearance above terrain, world units (0.3 u = ~480 m real at 4x) */
+  minClearance: 0.3,
   /** ceiling, real metres */
-  ceilingM: 15_000,
+  ceilingM: 32_000,
+  /** boost energy: drains while boosting, refills otherwise (fractions per second) */
+  boostDrain: 0.22,
+  boostRefill: 0.07,
   /** HUD airspeed = speed * this (km/h) */
-  displayKmhPerUnit: 180,
+  displayKmhPerUnit: 90,
 } as const;

@@ -12,6 +12,11 @@ export interface FlightInput {
 }
 
 export interface FlightTelemetry extends LatLon {
+  /** 0..1 */
+  boostEnergy: number;
+  boosting: boolean;
+  /** 0 at slow speed, 1 at full boost */
+  speedFraction: number;
   altitudeM: number;
   groundM: number;
   aglM: number;
@@ -36,6 +41,10 @@ export class FlightModel {
   readonly orientation = new Quaternion();
   readonly velocity = new Vector3();
   speed: number = FLIGHT.cruiseSpeed;
+  /** boost energy, 0..1 */
+  boostEnergy = 1;
+  /** true while boost is actually being applied */
+  boosting = false;
   climb = 0;
   bank = 0;
   scraping = false;
@@ -48,15 +57,21 @@ export class FlightModel {
 
   constructor(private surfaceM: SurfaceFn) {}
 
-  /** Place the plane above a point, facing a compass heading (degrees). */
-  spawn(lat: number, lon: number, headingDeg: number, aglM = 1500) {
+  /**
+   * Place the plane over a point, facing a compass heading (degrees), at an
+   * altitude above sea level (default: cruise), but never closer than 1,500 m
+   * to the ground.
+   */
+  spawn(lat: number, lon: number, headingDeg: number, altitudeM: number = FLIGHT.cruiseAltitudeM) {
     const up = latLonToDirection(lat, lon, this.up);
-    const ground = elevationToUnits(this.surfaceM(lat, lon));
-    this.position.copy(up).multiplyScalar(WORLD_RADIUS + ground + elevationToUnits(aglM));
+    const groundM = this.surfaceM(lat, lon);
+    const alt = Math.max(altitudeM, groundM + 1500);
+    this.position.copy(up).multiplyScalar(WORLD_RADIUS + elevationToUnits(alt));
     const { east, north } = tangentFrame(up);
     const h = (headingDeg * Math.PI) / 180;
     this.heading.copy(north).multiplyScalar(Math.cos(h)).addScaledVector(east, Math.sin(h)).normalize();
     this.speed = FLIGHT.cruiseSpeed;
+    this.boostEnergy = 1;
     this.climb = 0;
     this.bank = 0;
     this.updateOrientation();
@@ -66,8 +81,14 @@ export class FlightModel {
     dt = Math.min(dt, 0.1);
     const up = this.up.copy(this.position).normalize();
 
+    // Boost uses energy; it refills when not boosting.
+    this.boosting = input.boost && this.boostEnergy > 0.01;
+    this.boostEnergy = this.boosting
+      ? Math.max(0, this.boostEnergy - FLIGHT.boostDrain * dt)
+      : Math.min(1, this.boostEnergy + FLIGHT.boostRefill * dt);
+
     // Speed
-    const target = input.boost ? FLIGHT.boostSpeed : input.slow ? FLIGHT.slowSpeed : FLIGHT.cruiseSpeed;
+    const target = this.boosting ? FLIGHT.boostSpeed : input.slow ? FLIGHT.slowSpeed : FLIGHT.cruiseSpeed;
     const accel = FLIGHT.acceleration * (target > this.speed ? 1 : 1.5);
     this.speed += Math.sign(target - this.speed) * Math.min(Math.abs(target - this.speed), accel * dt);
 
@@ -148,6 +169,9 @@ export class FlightModel {
       aglM: altitudeM - groundM,
       headingDeg: headingOf(this.heading, this.up.copy(this.position).normalize()),
       airspeedKmh: this.speed * FLIGHT.displayKmhPerUnit,
+      boostEnergy: this.boostEnergy,
+      boosting: this.boosting,
+      speedFraction: (this.speed - FLIGHT.slowSpeed) / (FLIGHT.boostSpeed - FLIGHT.slowSpeed),
       climbDeg: (this.climb * 180) / Math.PI,
       scraping: this.scraping,
     };

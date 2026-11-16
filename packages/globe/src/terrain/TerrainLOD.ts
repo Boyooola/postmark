@@ -10,11 +10,12 @@ import {
   ShaderMaterial,
   Sphere,
   Texture,
-  Vector2,
   Vector3,
+  Vector4,
 } from "three";
-import { WORLD_RADIUS, elevationToUnits } from "@postmark/game-core";
+import { DETAIL_EDGE_FADE, WORLD_RADIUS, elevationToUnits, type DetailWindow } from "@postmark/game-core";
 import type { AtmosphereUniforms } from "../atmosphereParams";
+import type { CloudUniforms } from "../cloudParams";
 import { terrainFragment, terrainVertex } from "./terrainShader";
 
 /** Cells per chunk edge. Every chunk is the same 33x33 vertex grid, drawn instanced. */
@@ -34,8 +35,11 @@ const FACES: [Vector3, Vector3, Vector3][] = [
 export interface TerrainTextures {
   height: Texture;
   heightSize: { width: number; height: number };
+  detail: Texture;
+  fine: Texture;
   surface: Texture;
   aux: Texture;
+  coast: Texture;
 }
 
 export interface TerrainOptions {
@@ -99,7 +103,7 @@ export class TerrainLOD {
   private maxElevUnits = elevationToUnits(9000);
   chunksDrawn = 0;
 
-  constructor(tex: TerrainTextures, atmo: AtmosphereUniforms, opts: TerrainOptions = {}) {
+  constructor(tex: TerrainTextures, atmo: AtmosphereUniforms, clouds: CloudUniforms, opts: TerrainOptions = {}) {
     this.maxDepth = opts.maxDepth ?? 8;
     this.splitFactor = opts.splitFactor ?? 2.2;
     const geometry = buildChunkGeometry();
@@ -114,21 +118,51 @@ export class TerrainLOD {
       fragmentShader: terrainFragment,
       uniforms: {
         ...atmo,
+        ...clouds,
         uFaces: { value: faces },
         uHeight: { value: tex.height },
         uSurface: { value: tex.surface },
         uAux: { value: tex.aux },
-        uHeightTexel: { value: new Vector2(1 / tex.heightSize.width, 1 / tex.heightSize.height) },
+        uCoast: { value: tex.coast },
+        uTime: { value: 0 },
+        uPixelAngle: { value: 0.0015 },
+        uRelief: { value: 1 },
+        uDetail: { value: tex.detail },
+        uDetailRect: { value: new Vector4(0, 0, 1, 0) },
+        uFine: { value: tex.fine },
+        uFineRect: { value: new Vector4(0, 0, 1, 0) },
+        uDetailFade: { value: DETAIL_EDGE_FADE },
+        uStepRad: { value: new Vector3((2 * Math.PI) / tex.heightSize.width, 0.001, 0.0002) },
         uElevScale: { value: elevationToUnits(1) },
         uSkirt: { value: 0.02 * WORLD_RADIUS },
         uCamPos: { value: new Vector3() },
-        uHaze: { value: 0.5 },
-        uInscatter: { value: 0.42 },
+        uHaze: { value: 0.3 },
+        uInscatter: { value: 0.14 },
         uNightLights: { value: 0.9 },
       },
     });
     this.mesh = new Mesh(geometry, this.material);
     this.mesh.frustumCulled = false;
+  }
+
+  /** Point the shaders at a newly loaded detail window. */
+  setDetailWindow(w: DetailWindow) {
+    (this.material.uniforms.uDetailRect.value as Vector4).set(w.lon0, w.lat0, w.spanDeg, 1);
+    (this.material.uniforms.uStepRad.value as Vector3).y = ((w.spanDeg / w.size) * Math.PI) / 180;
+  }
+
+  /** The fine (~610 m) window; null turns it off (no fine data near the plane). */
+  setFineWindow(w: DetailWindow | null) {
+    const r = this.material.uniforms.uFineRect.value as Vector4;
+    if (!w) return void r.setW(0);
+    r.set(w.lon0, w.lat0, w.spanDeg, 1);
+    (this.material.uniforms.uStepRad.value as Vector3).z = ((w.spanDeg / w.size) * Math.PI) / 180;
+  }
+
+  /** Per-frame values: animation time and the size of a screen pixel (for anti-aliasing). */
+  setFrame(time: number, viewportHeightPx: number, camera: PerspectiveCamera) {
+    this.material.uniforms.uTime.value = time;
+    this.material.uniforms.uPixelAngle.value = (2 * Math.tan((camera.fov * Math.PI) / 360)) / Math.max(1, viewportHeightPx);
   }
 
   /** Re-select chunks for this camera. Cheap enough to run every frame. */

@@ -1,5 +1,7 @@
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import {
   AdditiveBlending,
+  Box3,
   BoxGeometry,
   BufferAttribute,
   BufferGeometry,
@@ -15,12 +17,56 @@ import {
   type Object3D,
 } from "three";
 
+export interface PlaneModel {
+  root: Group;
+  propeller: Object3D;
+  wingTips: [Object3D, Object3D];
+}
+
+/** Size of the plane in world units before the engine's PLANE_SCALE (matches the placeholder). */
+const PLANE_LENGTH_UNITS = 0.3;
+
+/**
+ * Load the Blender-made mail plane (glTF, metres, nose towards -Z after export).
+ * Expects nodes named "propeller", "wingtip_left" and "wingtip_right"
+ * (docs/blender-pipeline.md). Resolves to null if anything is missing.
+ */
+export async function loadPlaneModel(url: string): Promise<PlaneModel | null> {
+  try {
+    const gltf = await new GLTFLoader().loadAsync(url);
+    const scene = gltf.scene;
+    const propeller = scene.getObjectByName("propeller");
+    const left = scene.getObjectByName("wingtip_left");
+    const right = scene.getObjectByName("wingtip_right");
+    if (!propeller || !left || !right) {
+      console.warn("[plane] model is missing propeller / wingtip nodes; keeping the placeholder");
+      return null;
+    }
+    // Model is authored ~8 m long; fit it to the gameplay size.
+    scene.updateMatrixWorld(true);
+    const box = new Box3().setFromObject(scene);
+    const length = box.max.z - box.min.z;
+    scene.scale.setScalar(PLANE_LENGTH_UNITS / Math.max(length, 1e-3));
+    scene.traverse((o) => {
+      const m = (o as Mesh).material as MeshStandardMaterial | undefined;
+      if (m && "emissiveIntensity" in m && m.emissive && m.emissive.getHex() !== 0) m.emissiveIntensity = 3;
+    });
+    const root = new Group();
+    root.name = "mailplane";
+    root.add(scene);
+    return { root, propeller, wingTips: [left, right] };
+  } catch (err) {
+    console.warn("[plane] could not load", url, err);
+    return null;
+  }
+}
+
 /**
  * Placeholder mail plane built from primitives (forward = -Z, up = +Y).
  * Replace with a Blender model later: see docs/blender-pipeline.md.
  * Size is in world units; 0.3 u long reads well at the default chase distance.
  */
-export function createPlaneModel(): { root: Group; propeller: Object3D; wingTips: [Object3D, Object3D] } {
+export function createPlaneModel(): PlaneModel {
   const root = new Group();
   const body = new MeshStandardMaterial({ color: 0xf2c230, roughness: 0.55, metalness: 0.05 });
   const trim = new MeshStandardMaterial({ color: 0xb8322a, roughness: 0.6 });
@@ -113,6 +159,7 @@ export class Trail {
     };
     this.mesh = new Mesh(this.geom, mat);
     this.mesh.frustumCulled = false;
+    this.mesh.renderOrder = 30; // after sky and clouds
   }
 
   reset() {

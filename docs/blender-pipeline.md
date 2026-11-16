@@ -43,11 +43,39 @@ Aircraft follow the same rules with these differences:
 - Name the propeller object `propeller` (spun by the game), and add empties named `wingtip_left` and `wingtip_right` for the vapour trails and navigation lights.
 - Origin at the centre of mass.
 
-The placeholder mail plane is built in code in `packages/globe/src/Plane.ts`. Replacing it with a glTF is
-an M3 task.
+**The mail plane exists:** source in `tools/blender/postmark-assets.blend` (collection `PostmarkMailPlane`),
+exported to `apps/web/public/models/aircraft/mailplane.glb` (62 KB; merged into an airframe mesh plus a
+`propeller` with its blades). It is a yellow high-wing
+monoplane about 8 m long with an 11 m span: red cowling, wingtips and fin, struts, fixed gear, blue cabin
+glass, and emissive navigation lights (red left, green right). The game fits it to its gameplay size by its
+bounding box, so keep it in real metres. If the file fails to load, a placeholder built in
+`packages/globe/src/Plane.ts` flies instead.
+
+To change it: open the `.blend`, edit the `PostmarkMailPlane` collection, select everything in it except
+`PM_PreviewCam` and `PM_Sun`, and export with the settings above to the same path.
+
+## All Blender assets
+
+Everything lives in one source file, `tools/blender/postmark-assets.blend`, one collection per asset. Merge
+each asset's meshes before exporting (one draw call per material), keeping only nodes the game animates.
+
+| Asset | Collection | Export | Game conventions |
+| --- | --- | --- | --- |
+| Mail plane | `PostmarkMailPlane` | `models/aircraft/mailplane.glb` | nodes `propeller`, `wingtip_left`, `wingtip_right`; fitted to 0.3 u length |
+| Parcel + parachute | `PostmarkParcel` | `models/props/parcel.glb` | node `box`; node `chute` (origin on the box top) is scaled open by the game |
+| Hot-air balloon | `PostmarkBalloon` | `models/props/balloon.glb` | materials `gore_a` / `gore_b` are recoloured per country; fitted to 1.6 u tall; origin at the basket floor |
+| Eiffel Tower (330 m) | `LM_eiffel-tower` | `models/landmarks/eiffel-tower.glb` | real metres, origin at the base centre |
+| Great Pyramid + two smaller (139 m) | `LM_giza-pyramids` | `models/landmarks/giza-pyramids.glb` | stepped courses in two stone tones |
+| Big Ben (96 m) | `LM_big-ben` | `models/landmarks/big-ben.glb` | clock faces glow faintly at night |
+| Burj Khalifa (828 m) | `LM_burj-khalifa` | `models/landmarks/burj-khalifa.glb` | Y-shaped, spiralling setbacks |
+| CN Tower (553 m) | `LM_cn-tower` | `models/landmarks/cn-tower.glb` | |
+
+A landmark model is enabled by its `"model"` field in `landmarks.source.json` (re-bake afterwards).
+The Blender text block `pm_helpers` inside the `.blend` holds the modelling helpers (lathe, loft, beams,
+arches, export, preview render) used to build these.
 
 ## Using Blender with Claude
 
-The Claude desktop app can drive Blender on your machine through its Blender connection. A good workflow:
-ask Claude to block out a landmark with these rules, review it in Blender, then export with the settings
-above.
+The Claude desktop app can drive Blender on your machine through its Blender connection; the mail plane was
+built that way (Python in Blender, preview renders, glTF export). A good workflow for landmarks: ask Claude
+to block one out with these rules, review it in Blender, then export with the settings above.

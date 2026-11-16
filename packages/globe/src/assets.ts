@@ -13,6 +13,7 @@ import {
   type WebGLRenderer,
 } from "three";
 import { HeightField, type City, type Landmark } from "@postmark/game-core";
+import type { TileManifest } from "./terrain/DetailTerrain";
 
 export interface GeoMeta {
   height: { width: number; height: number; minM: number; maxM: number; source: string };
@@ -27,8 +28,13 @@ export interface GeoAssets {
   heightTexture: Texture;
   surfaceTexture: Texture;
   auxTexture: Texture;
+  coastTexture: Texture;
   landmarks: Landmark[];
   cities: City[];
+  tiles: TileManifest | null;
+  /** fine (~610 m) tiles for selected regions */
+  tilesFine: TileManifest | null;
+  floatLinear: boolean;
 }
 
 export type Progress = (label: string, fraction: number) => void;
@@ -71,10 +77,12 @@ function colourTexture(bmp: ImageBitmap): Texture {
 export async function loadGeoAssets(base: string, renderer: WebGLRenderer, progress: Progress = () => {}): Promise<GeoAssets> {
   const maxTex = renderer.capabilities.maxTextureSize;
   progress("Reading the atlas", 0.02);
-  const [meta, landmarks, cities] = await Promise.all([
+  const [meta, landmarks, cities, tiles, tilesFine] = await Promise.all([
     fetch(`${base}/meta.json`).then((r) => r.json() as Promise<GeoMeta>),
     fetch(`${base}/landmarks.json`).then((r) => r.json()).then((j) => j.landmarks as Landmark[]),
     fetch(`${base}/cities.json`).then((r) => r.json()).then((j) => j.cities as City[]),
+    fetch(`${base}/tiles.json`).then((r) => (r.ok ? (r.json() as Promise<TileManifest>) : null)).catch(() => null),
+    fetch(`${base}/tiles-8.json`).then((r) => (r.ok ? (r.json() as Promise<TileManifest>) : null)).catch(() => null),
   ]);
 
   progress("Loading elevation data", 0.1);
@@ -98,9 +106,10 @@ export async function loadGeoAssets(base: string, renderer: WebGLRenderer, progr
   heightTexture.needsUpdate = true;
 
   progress("Loading coastlines, lakes and rivers", 0.6);
-  const [surfaceBmp, auxBmp] = await Promise.all([
+  const [surfaceBmp, auxBmp, coastBmp] = await Promise.all([
     fetchBitmap(`${base}/surface.png`, Math.min(maxTex, 8192)),
     fetchBitmap(`${base}/aux.png`, Math.min(maxTex, 4096)),
+    fetchBitmap(`${base}/coast.png`, Math.min(maxTex, 8192)),
   ]);
   progress("Preparing the world", 0.9);
   return {
@@ -109,8 +118,12 @@ export async function loadGeoAssets(base: string, renderer: WebGLRenderer, progr
     heightTexture,
     surfaceTexture: colourTexture(surfaceBmp),
     auxTexture: colourTexture(auxBmp),
+    coastTexture: colourTexture(coastBmp),
     landmarks,
     cities,
+    tiles,
+    tilesFine,
+    floatLinear,
   };
 }
 

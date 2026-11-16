@@ -1,12 +1,13 @@
 import type { FlightInput } from "@postmark/game-core";
 
-export type ActionKey = "toggleCamera" | "timeFaster" | "timeSlower" | "respawn" | "help";
+export type ActionKey = "drop" | "timeFaster" | "timeSlower" | "respawn" | "help" | "debug";
 
-/** Keyboard + gamepad. WASD/arrows steer (W climbs), Shift/Space boosts, Q slows down. */
+/** Keyboard + gamepad. WASD/arrows steer (W climbs), Shift boosts, Q slows down, Space drops a parcel. */
 export class Input {
   private keys = new Set<string>();
   private listeners: ((a: ActionKey) => void)[] = [];
   private smooth: FlightInput = { pitch: 0, turn: 0, boost: false, slow: false };
+  private padDrop = false;
 
   constructor(private target: Window = window) {
     target.addEventListener("keydown", this.onDown);
@@ -24,11 +25,13 @@ export class Input {
     if (e.code.startsWith("Arrow") || e.code === "Space") e.preventDefault();
     if (e.repeat) return;
     const map: Record<string, ActionKey> = {
-      KeyC: "toggleCamera",
+      Space: "drop",
+      Enter: "drop",
       KeyT: "timeFaster",
       KeyG: "timeSlower",
       KeyR: "respawn",
       KeyH: "help",
+      Backquote: "debug",
     };
     const a = map[e.code];
     if (a) this.listeners.forEach((l) => l(a));
@@ -41,7 +44,7 @@ export class Input {
     // Non-inverted by default: W / Up climbs. (An "invert" option comes with settings.)
     let pitch = (k.has("KeyW") || k.has("ArrowUp") ? 1 : 0) - (k.has("KeyS") || k.has("ArrowDown") ? 1 : 0);
     let turn = (k.has("KeyD") || k.has("ArrowRight") ? 1 : 0) - (k.has("KeyA") || k.has("ArrowLeft") ? 1 : 0);
-    let boost = k.has("ShiftLeft") || k.has("ShiftRight") || k.has("Space");
+    let boost = k.has("ShiftLeft") || k.has("ShiftRight");
     let slow = k.has("KeyQ") || k.has("ControlLeft");
 
     const pads = typeof navigator !== "undefined" && navigator.getGamepads ? navigator.getGamepads() : [];
@@ -50,7 +53,10 @@ export class Input {
       const dz = (v: number) => (Math.abs(v) < 0.12 ? 0 : v);
       turn += dz(p.axes[0] ?? 0);
       pitch -= dz(p.axes[1] ?? 0); // stick up = climb
-      boost ||= (p.buttons[7]?.value ?? 0) > 0.3 || !!p.buttons[0]?.pressed;
+      boost ||= (p.buttons[7]?.value ?? 0) > 0.3;
+      const a = !!p.buttons[0]?.pressed;
+      if (a && !this.padDrop) this.listeners.forEach((l) => l("drop"));
+      this.padDrop = a;
       slow ||= (p.buttons[6]?.value ?? 0) > 0.3;
     }
 
