@@ -12,7 +12,7 @@ import {
   Texture,
   type WebGLRenderer,
 } from "three";
-import { HeightField, type City, type Landmark } from "@postmark/game-core";
+import { HeightField, Places, type City } from "@postmark/game-core";
 import type { TileManifest } from "./terrain/DetailTerrain";
 
 export interface GeoMeta {
@@ -31,7 +31,8 @@ export interface GeoAssets {
   coastTexture: Texture;
   /** true-colour satellite map (sRGB, decoded in the shader) */
   colorTexture: Texture;
-  landmarks: Landmark[];
+  /** "where am I": country or sea under a point */
+  places: Places;
   cities: City[];
   tiles: TileManifest | null;
   /** fine (~610 m) tiles for selected regions */
@@ -79,9 +80,9 @@ function colourTexture(bmp: ImageBitmap): Texture {
 export async function loadGeoAssets(base: string, renderer: WebGLRenderer, progress: Progress = () => {}): Promise<GeoAssets> {
   const maxTex = renderer.capabilities.maxTextureSize;
   progress("Reading the atlas", 0.02);
-  const [meta, landmarks, cities, tiles, tilesFine] = await Promise.all([
+  const [meta, placeNames, cities, tiles, tilesFine] = await Promise.all([
     fetch(`${base}/meta.json`).then((r) => r.json() as Promise<GeoMeta>),
-    fetch(`${base}/landmarks.json`).then((r) => r.json()).then((j) => j.landmarks as Landmark[]),
+    fetch(`${base}/places.json`).then((r) => r.json() as Promise<{ countries: string[]; seas: string[] }>),
     fetch(`${base}/cities.json`).then((r) => r.json()).then((j) => j.cities as City[]),
     fetch(`${base}/tiles.json`).then((r) => (r.ok ? (r.json() as Promise<TileManifest>) : null)).catch(() => null),
     fetch(`${base}/tiles-8.json`).then((r) => (r.ok ? (r.json() as Promise<TileManifest>) : null)).catch(() => null),
@@ -108,12 +109,15 @@ export async function loadGeoAssets(base: string, renderer: WebGLRenderer, progr
   heightTexture.needsUpdate = true;
 
   progress("Loading coastlines, lakes and rivers", 0.6);
-  const [surfaceBmp, auxBmp, coastBmp, colorBmp] = await Promise.all([
+  const [surfaceBmp, auxBmp, coastBmp, colorBmp, placesBmp] = await Promise.all([
     fetchBitmap(`${base}/surface.png`, Math.min(maxTex, 8192)),
     fetchBitmap(`${base}/extras.png`, Math.min(maxTex, 4096)),
     fetchBitmap(`${base}/coast.png`, Math.min(maxTex, 8192)),
     fetchBitmap(`${base}/color.webp`, Math.min(maxTex, 8192)),
+    fetchBitmap(`${base}/places.png`),
   ]);
+  const places = new Places({ width: placesBmp.width, height: placesBmp.height, rgba: pixels(placesBmp), ...placeNames });
+  placesBmp.close();
   progress("Preparing the world", 0.9);
   return {
     meta,
@@ -123,7 +127,7 @@ export async function loadGeoAssets(base: string, renderer: WebGLRenderer, progr
     auxTexture: colourTexture(auxBmp),
     coastTexture: colourTexture(coastBmp),
     colorTexture: colourTexture(colorBmp),
-    landmarks,
+    places,
     cities,
     tiles,
     tilesFine,

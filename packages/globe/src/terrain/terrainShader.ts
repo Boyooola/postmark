@@ -6,14 +6,21 @@ export const terrainVertex = /* glsl */ `
 #include <logdepthbuf_pars_vertex>
 ${geoChunk}
 ${heightChunk}
+${atmosphereChunk}
 attribute vec4 aChunk;        // face-space x0, y0, size, face index
 uniform mat3 uFaces[6];
 uniform sampler2D uSurface;   // land, lake, river, ice
-uniform float uRadius;
+uniform vec3 uCamPos;
 uniform float uElevScale;     // metres -> world units (includes exaggeration)
 uniform float uSkirt;
 varying vec3 vDir;
 varying vec3 vWorld;
+// Atmosphere terms vary smoothly, so they are computed per vertex (much cheaper
+// than per pixel): sunlight reaching the ground, and the view ray's in-scatter
+// and transmittance (aerial perspective).
+varying vec3 vSun;
+varying vec3 vInscatter;
+varying vec3 vTransmit;
 ${bendChunk}
 
 vec3 spherify(vec3 p) {
@@ -36,6 +43,10 @@ void main() {
   vec3 world = bendWorld(dir * r);
   vDir = dir;
   vWorld = world;
+  vSun = sunlightAt(dir * (r + 0.05));
+  vec3 toV = world - uCamPos;
+  float d = length(toV);
+  vInscatter = scatter(uCamPos, toV / max(d, 1e-6), d, vTransmit);
   gl_Position = projectionMatrix * viewMatrix * vec4(world, 1.0);
   #include <logdepthbuf_vertex>
 }
@@ -67,17 +78,23 @@ uniform float uRelief;        // 0..1 strength of synthetic relief detail
 uniform float uAmbient;       // sky fill-light strength (low = deep, contrasty shadows)
 varying vec3 vDir;
 varying vec3 vWorld;
+varying vec3 vSun;
+varying vec3 vInscatter;
+varying vec3 vTransmit;
 
 // ---------------------------------------------------------------- relief detail
 // Ridged multifractal noise: sharp crests and branching gullies, a cheap stand-in
 // for erosion below the DEM's ~2 km resolution. Octaves smaller than ~2 pixels
 // are faded out so the surface never shimmers.
 float ridge(vec3 p) { float n = 1.0 - abs(vnoise(p) * 2.0 - 1.0); return n * n; }
+// Domain warp: bends the ridges so they branch like drainage, not like scales.
+// Computed once per pixel and shared by the three erosion() taps.
+vec3 erosionWarp(vec3 p) {
+  return vec3(vnoise(p * 0.45 + 3.1), vnoise(p * 0.45 + 7.7), vnoise(p * 0.45 + 1.3)) * 1.6;
+}
 float erosion(vec3 p, float pix) {
-  // Domain warp: bends the ridges so they branch like drainage, not like scales.
-  p += vec3(vnoise(p * 0.45 + 3.1), vnoise(p * 0.45 + 7.7), vnoise(p * 0.45 + 1.3)) * 1.6;
   float freq = 1.7, amp = 1.0, sum = 0.0, norm = 0.0, prev = 1.0;
-  for (int i = 0; i < 6; i++) {
+  for (int i = 0; i < 5; i++) {
     float fade = clamp((1.0 / (freq * pix) - 2.0) * 0.5, 0.0, 1.0);
     float r = ridge(p * freq + float(i) * 17.3);
     sum += r * amp * mix(1.0, prev, 0.6) * fade;
@@ -97,9 +114,9 @@ float erosion(vec3 p, float pix) {
 uniform float uShadowSoft;
 float terrainShadow(vec3 start, float pix) {
   float topR = uRadius + 8900.0 * uElevScale;
-  float t = max(pix * 1.5, 0.004);
+  float t = max(pix * 1.5, 0.006);
   float vis = 1.0;
-  for (int i = 0; i < 24; i++) {
+  for (int i = 0; i < 16; i++) {
     vec3 p = start + uSunDir * t;
     float r = length(p);
     if (r > topR) break;
@@ -107,7 +124,7 @@ float terrainShadow(vec3 start, float pix) {
     float surf = uRadius + max(heightAt(d).x, 0.0) * uElevScale;
     vis = min(vis, clamp((r - surf) / (t * uShadowSoft), 0.0, 1.0));
     if (vis <= 0.001) return 0.0;
-    t *= 1.32;
+    t *= 1.55;
   }
   return vis;
 }
@@ -161,13 +178,16 @@ void main() {
 
   // Real elevation and slope from the heightmap (finite differences along the
   // local east/north great circles, one texel apart).
-  vec2 hw = heightAt(dir);
+  vec2 hw = heightAtLL(ll);
   float h = hw.x;
   float stp = hw.y > 1.5 ? uStepRad.z : (hw.y > 0.5 ? uStepRad.y : uStepRad.x);
-  float hE = heightAt(normalize(dir + east * stp)).x;
-  float hW = heightAt(normalize(dir - east * stp)).x;
-  float hN = heightAt(normalize(dir + north * stp)).x;
-  float hS = heightAt(normalize(dir - north * stp)).x;
+  // Neighbours along the local east/north great circles, in lat/lon directly
+  // (no per-tap trigonometry).
+  float dLon = stp / max(cos(ll.x), 0.02);
+  float hE = heightAtLL(ll + vec2(0.0, dLon)).x;
+  float hW = heightAtLL(ll - vec2(0.0, dLon)).x;
+  float hN = heightAtLL(ll + vec2(stp, 0.0)).x;
+  float hS = heightAtLL(ll - vec2(stp, 0.0)).x;
   float arc = 2.0 * stp * uRadius;
   float sE = (max(hE, 0.0) - max(hW, 0.0)) * uElevScale / arc;
   float sN = (max(hN, 0.0) - max(hS, 0.0)) * uElevScale / arc;
@@ -197,9 +217,10 @@ void main() {
   float e0 = 0.0, ridgeV = 0.0;
   if (reliefM > 1.0 && pix < 0.6) {
     float de = max(pix * 1.5, 0.02);
-    e0 = erosion(wp, pix);
-    float eE = erosion(wp + east * de, pix);
-    float eN = erosion(wp + north * de, pix);
+    vec3 warp = erosionWarp(wp);
+    e0 = erosion(wp + warp, pix);
+    float eE = erosion(wp + warp + east * de, pix);
+    float eN = erosion(wp + warp + north * de, pix);
     float s = reliefM * uElevScale / de;
     sE += (eE - e0) * s;
     sN += (eN - e0) * s;
@@ -263,8 +284,8 @@ void main() {
 
   // ------------------------------------------------ lighting
   vec3 V = toCam / camDist;
-  vec3 sunCol = sunlightAt(vWorld + dir * 0.05) * 2.9;
-  float cloudHere = cloudDensity(dir);
+  vec3 sunCol = vSun * 2.9;
+  float cloudHere = uCloudCover > 0.0 ? cloudDensity(dir) : 0.0;
   sunCol *= 1.0 - 0.6 * cloudHere;
   float ndl = max(dot(n, uSunDir), 0.0);
   float day = smoothstep(-0.15, 0.2, dot(dir, uSunDir));
@@ -299,9 +320,7 @@ void main() {
   col += lights * vec3(1.0, 0.72, 0.38) * night * uNightLights * (1.0 - water * 0.9) * (1.0 - 0.6 * cloudHere);
 
   // ------------------------------------------------ aerial perspective
-  vec3 T;
-  vec3 inscatter = scatter(uCamPos, -V, camDist, T);
-  col = col * mix(vec3(1.0), T, uHaze) + inscatter * uInscatter;
+  col = col * mix(vec3(1.0), vTransmit, uHaze) + vInscatter * uInscatter;
 
   gl_FragColor = vec4(col, 1.0);
   #include <tonemapping_fragment>

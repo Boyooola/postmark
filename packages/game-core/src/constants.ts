@@ -42,10 +42,15 @@ export const FLIGHT = {
   maxBankAngle: (40 * Math.PI) / 180,
   /** default cruising altitude, real metres above sea level (high, for the big view) */
   cruiseAltitudeM: 16_000,
-  /** minimum clearance above terrain, world units (0.3 u = ~480 m real at 4x) */
-  minClearance: 0.3,
-  /** ceiling, real metres */
-  ceilingM: 32_000,
+  /**
+   * Altitude band, real metres above sea level. The plane can't dive into the
+   * ground or climb out of the view: it stays between max(floorM, ground +
+   * clearanceM) and ceilingM, easing to level flight in the last softZoneM.
+   */
+  floorM: 11_000,
+  ceilingM: 20_000,
+  clearanceM: 2_500,
+  softZoneM: 1_500,
   /** boost energy: drains while boosting, refills otherwise (fractions per second) */
   boostDrain: 0.22,
   boostRefill: 0.07,

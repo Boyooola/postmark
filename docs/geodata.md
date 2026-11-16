@@ -45,6 +45,7 @@ All rasters are **equirectangular**: x = longitude −180° → +180°, y = lati
 | `surface.png` | 8192 × 4096 RGBA | Anti-aliased masks: R land, G lake, B river, A ice |
 | `coast.png` | 8192 × 4096 RGB | Signed distances, `km = (v − 128) × 0.5` (±64 km): R to the sea coast (positive at sea), G to a lake shore (positive on the lake). Draws smooth coastlines and drives surf lines, shallows and beaches. |
 | `color.webp` | 8192 × 4096 sRGB | Satellite true colour (Blue Marble), graded in the terrain shader (`uSatGrade`: brightness, saturation, contrast) |
+| `places.png` + `places.json` | 4096 × 2048 RGB | Country and sea IDs for "where am I" (`bake_places.py`, from Natural Earth admin-0 countries and marine areas) |
 | `extras.png` | 4096 × 2048 RGB | R city lights, G desert, B reserved (named "extras", not "aux": `aux` is a reserved file name on Windows) |
 | `cities.json` | 2,000 entries | name, country, lat/lon, population, capital flag, elevation |
 | `landmarks.json` | 43 entries | landmark data plus ground elevation sampled from the DEM |
@@ -100,9 +101,8 @@ Add a mountain to `landmarks.source.json` with `summitM` and re-bake to restore 
 | Vertical exaggeration | **×4** (×12 with the 18 km data, ×8 with 1.9 km) | at ~610 m the real slopes are steep enough; more turns ranges into needles |
 | Landmark display scale | ×6 on top of the exaggeration | a 330 m tower must be readable from cruising altitude |
 | Cloud layer | 3,200 m | procedural, see below |
-| Cruising altitude | 16,000 m (ceiling 32,000 m) | with ×4 relief this keeps the high, curved-horizon view |
+| Cruising altitude | 16,000 m, band 11,000–20,000 m (and ≥ 2,500 m above the ground) | keeps the high, curved-horizon view; the plane levels out softly near either limit |
 | Cruise speed | 5 units/s (boost 12) | time is compressed so continents take minutes |
-| Minimum clearance | 0.3 units (~480 m real) | |
 
 All data, physics and HUD numbers stay in **real metres**. Only rendering and the collision surface (so it
 matches what you see) use the exaggerated heights.
@@ -137,6 +137,7 @@ pnpm geo:fetch    # Natural Earth + fallback DEM into tools/geo-pipeline/raw (gi
 pnpm geo:bake     # writes apps/web/public/geo/* (about 2.5 minutes, ~3 GB RAM)
 # satellite colour: put the 8 Blue Marble tiles in a folder, then
 python3 tools/geo-pipeline/bake_color.py --bmng <that folder>     # ~1 minute; also refreshes coast.png
+# (pnpm geo:bake also runs bake_places.py: country and sea lookup for the HUD)
 # fine tiles: unzip the GEBCO_2026 GeoTIFFs into a folder, then
 python3 tools/geo-pipeline/bake_detail.py --gebco <that folder>   # ~1.5 minutes, reads with memory maps
 ```

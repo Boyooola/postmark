@@ -59,13 +59,11 @@ export class FlightModel {
 
   /**
    * Place the plane over a point, facing a compass heading (degrees), at an
-   * altitude above sea level (default: cruise), but never closer than 1,500 m
-   * to the ground.
+   * altitude above sea level (default: cruise), kept inside the altitude band.
    */
   spawn(lat: number, lon: number, headingDeg: number, altitudeM: number = FLIGHT.cruiseAltitudeM) {
     const up = latLonToDirection(lat, lon, this.up);
-    const groundM = this.surfaceM(lat, lon);
-    const alt = Math.max(altitudeM, groundM + 1500);
+    const alt = Math.min(Math.max(altitudeM, this.floorAt(lat, lon)), FLIGHT.ceilingM);
     this.position.copy(up).multiplyScalar(WORLD_RADIUS + elevationToUnits(alt));
     const { east, north } = tangentFrame(up);
     const h = (headingDeg * Math.PI) / 180;
@@ -104,6 +102,14 @@ export class FlightModel {
       this.climb -= this.climb * Math.min(1, 1.6 * dt);
     }
     this.climb = clamp(this.climb, -FLIGHT.maxClimbAngle, FLIGHT.maxClimbAngle);
+    // Soft altitude band: level out smoothly near the floor and the ceiling.
+    {
+      const here = vectorToLatLon(this.position);
+      const altM = unitsToElevation(this.position.length() - WORLD_RADIUS);
+      const floor = this.floorAt(here.lat, here.lon);
+      if (this.climb < 0) this.climb *= clamp((altM - floor) / FLIGHT.softZoneM, 0, 1);
+      if (this.climb > 0) this.climb *= clamp((FLIGHT.ceilingM - altM) / FLIGHT.softZoneM, 0, 1);
+    }
 
     // Cosmetic bank follows turn input
     const targetBank = turn * FLIGHT.maxBankAngle;
@@ -121,23 +127,27 @@ export class FlightModel {
     const newUp = this.tmp.copy(this.position).normalize();
     this.heading.addScaledVector(newUp, -this.heading.dot(newUp)).normalize();
 
-    // Terrain and ceiling
+    // Hard altitude band (terrain clearance and ceiling)
     const { lat, lon } = vectorToLatLon(this.position);
-    const groundR = WORLD_RADIUS + elevationToUnits(this.surfaceM(lat, lon));
-    const minR = groundR + FLIGHT.minClearance;
+    const minR = WORLD_RADIUS + elevationToUnits(this.floorAt(lat, lon));
     const maxR = WORLD_RADIUS + elevationToUnits(FLIGHT.ceilingM);
     const r = this.position.length();
     this.scraping = false;
     if (r < minR) {
       this.position.multiplyScalar(minR / r);
       if (this.climb < 0) this.climb = 0;
-      this.scraping = true;
+      this.scraping = this.surfaceM(lat, lon) + FLIGHT.clearanceM > FLIGHT.floorM;
     } else if (r > maxR) {
       this.position.multiplyScalar(maxR / r);
-      if (this.climb > 0) this.climb *= 0.9;
+      if (this.climb > 0) this.climb = 0;
     }
 
     this.updateOrientation();
+  }
+
+  /** Lowest allowed altitude here, real metres: the band floor or terrain + clearance. */
+  floorAt(lat: number, lon: number) {
+    return Math.max(FLIGHT.floorM, this.surfaceM(lat, lon) + FLIGHT.clearanceM);
   }
 
   /** Model space: forward = -Z, up = +Y, right = +X. */

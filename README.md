@@ -3,7 +3,7 @@
 A cozy airmail flying game on a real Earth. Start a one-plane mail company in your hometown, fly letters
 across real mountains, coastlines and lakes, and grow it across a century of flight.
 
-**Status:** prototype: real-Earth terrain (ETOPO 2022 everywhere, GEBCO ~610 m in 10 mountain regions), a Geographical Adventures-style flight UI, the first delivery loop, and Blender-made plane, parcel, balloons and landmarks. See [docs/milestones.md](docs/milestones.md).
+**Status:** prototype: real-Earth terrain (ETOPO 2022 everywhere, GEBCO ~610 m in 10 mountain regions), a Geographical Adventures-style flight UI, the first delivery loop, and Blender-made plane, parcel and balloons. See [docs/milestones.md](docs/milestones.md).
 
 | | |
 | --- | --- |
@@ -37,7 +37,7 @@ Gamepad: left stick to fly, right trigger to boost, A to drop.
 | --- | --- |
 | `apps/web` | Next.js site and the `/play` page |
 | `packages/game-core` | Game logic: world scale, geo math, flight model (unit-tested) |
-| `packages/globe` | three.js renderer: terrain, atmosphere, plane, landmarks |
+| `packages/globe` | three.js renderer: terrain, atmosphere, plane, balloons, parcels |
 | `tools/geo-pipeline` | Bakes real elevation, coastlines, lakes, rivers, cities into `apps/web/public/geo` |
 | `docs/` | [architecture](docs/architecture.md), [geographic data and elevation](docs/geodata.md), [Blender pipeline](docs/blender-pipeline.md), [milestones](docs/milestones.md) |
 

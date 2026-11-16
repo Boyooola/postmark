@@ -13,6 +13,6 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "geo:fetch": "bash tools/geo-pipeline/fetch_sources.sh",
-    "geo:bake": "python3 tools/geo-pipeline/bake.py"
+    "geo:bake": "python3 tools/geo-pipeline/bake.py && python3 tools/geo-pipeline/bake_places.py --raw tools/geo-pipeline/raw"
   }
 }

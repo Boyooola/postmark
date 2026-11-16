@@ -115,7 +115,7 @@
    "licence": "Free to use with acknowledgement (GEBCO terms of use)"
   },
   {
-   "name": "Blue Marble: Next Generation (2004-01, 500 m)",
+   "name": "Blue Marble: Next Generation (2004-06, 500 m)",
    "by": "NASA Earth Observatory (Reto St\u00f6ckli)",
    "licence": "Public domain (US Government); credit NASA Earth Observatory"
   }
@@ -163,6 +163,6 @@
   "width": 8192,
   "height": 4096,
   "encoding": "sRGB true colour",
-  "month": "2004-01"
+  "month": "2004-06"
  }
 }

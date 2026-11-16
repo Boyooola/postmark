@@ -13,7 +13,8 @@ mkdir -p raw && cd raw
 NE=https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson
 for f in ne_10m_land ne_10m_minor_islands ne_10m_lakes ne_10m_lakes_europe ne_10m_lakes_north_america \
          ne_10m_rivers_lake_centerlines ne_10m_glaciated_areas ne_10m_antarctic_ice_shelves_polys \
-         ne_10m_urban_areas ne_10m_populated_places_simple ne_10m_geography_regions_polys; do
+         ne_10m_urban_areas ne_10m_populated_places_simple ne_10m_geography_regions_polys \
+         ne_10m_admin_0_countries ne_10m_geography_marine_polys; do
   [ -f "$f.geojson" ] || curl -fL -o "$f.geojson" "$NE/$f.geojson"
 done
 

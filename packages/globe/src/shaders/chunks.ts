@@ -157,8 +157,7 @@ vec3 windowAt(vec4 rect, float lonDeg, float latDeg) {
 // Elevation in metres: base, then the detail window, then the fine window.
 // Returns (height, level) with level 0 = base, 1 = detail, 2 = fine.
 // Must match TerrainHeights.sample() in game-core.
-vec2 heightAt(vec3 dir) {
-  vec2 ll = dirToLatLon(dir);
+vec2 heightAtLL(vec2 ll) {
   vec2 uv = vec2(ll.y / (2.0 * PI) + 0.5, 0.5 - ll.x / PI);
   float h = textureLod(uHeight, uv, 0.0).r;
   float lonDeg = degrees(ll.y), latDeg = degrees(ll.x);
@@ -169,6 +168,7 @@ vec2 heightAt(vec3 dir) {
   if (b.z > 0.0) { h = mix(h, textureLod(uFine, b.xy, 0.0).r, b.z); level = b.z > 0.5 ? 2.0 : level; }
   return vec2(h, level);
 }
+vec2 heightAt(vec3 dir) { return heightAtLL(dirToLatLon(dir)); }
 `;
 
 /**

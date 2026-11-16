@@ -88,7 +88,8 @@ function Hud({ engine }: { engine: Engine }) {
   if (!hud) return null;
   return (
     <div className="hud">
-      <Targets hud={hud} />
+      <Location name={hud.location} />
+      {hud.target && <Waypoint target={hud.target} />}
       <BoostGauge hud={hud} />
       <Compass heading={hud.telemetry.headingDeg} />
       <div className="toasts">
@@ -105,24 +106,28 @@ function Hud({ engine }: { engine: Engine }) {
   );
 }
 
-/** Up to three destinations across the top: arrow, country, city. */
-function Targets({ hud }: { hud: HudState }) {
+/** Top centre: the country or sea under the plane. */
+function Location({ name }: { name: string }) {
   return (
-    <div className="targets">
-      {hud.targets.map((t) => (
-        <div className="target" key={`${t.city}|${t.country}`}>
-          <div className="target-head">
-            <span className="target-arrow" aria-hidden>
-              <svg viewBox="0 0 24 24" style={{ transform: `rotate(${t.relativeDeg}deg)` }}>
-                <circle cx="12" cy="12" r="11" />
-                <path d="M12 5.5 L17 12.5 H13.6 V18.5 H10.4 V12.5 H7 Z" />
-              </svg>
-            </span>
-            <span className="target-country">{t.country}</span>
-          </div>
-          <span className="target-city">{t.city}</span>
-        </div>
-      ))}
+    <div className="location" style={{ opacity: name ? 1 : 0 }}>
+      {name || "\u00a0"}
+    </div>
+  );
+}
+
+/** Bottom centre: an arrow lying "on the ground" that turns towards the delivery. */
+function Waypoint({ target }: { target: NonNullable<HudState["target"]> }) {
+  return (
+    <div className="waypoint">
+      <div className="waypoint-arrow" aria-hidden>
+        <svg viewBox="0 0 100 100" style={{ transform: `rotateX(52deg) rotate(${target.relativeDeg}deg)` }}>
+          <path d="M50 6 L80 46 L61 46 L61 92 L39 92 L39 46 L20 46 Z" />
+        </svg>
+      </div>
+      <div className="waypoint-name">
+        {target.city}, {target.country}
+      </div>
+      <div className="waypoint-dist">{nf.format(target.distanceKm)} km</div>
     </div>
   );
 }
@@ -216,32 +221,20 @@ function Debug({ hud, engine }: { hud: HudState; engine: Engine }) {
       <p className="row"><span>Ground</span><b>{nf.format(t.groundM)} m</b></p>
       <p className="row"><span>Airspeed</span><b>{nf.format(t.airspeedKmh)} km/h</b></p>
       <p className="row"><span>Local time</span><b>{hud.localTime}{hud.timeScale !== 60 ? ` (×${hud.timeScale / 60})` : ""}</b></p>
-      <p className="row"><span>Render</span><b>{hud.fps} fps · {hud.chunks} chunks</b></p>
+      <p className="row"><span>Render</span><b>{hud.fps} fps · {Math.round(hud.renderScale * 100)}% res · {hud.chunks} chunks</b></p>
       <p className="row"><span>Terrain</span><b>{hud.streaming ? "streaming…" : "ready"}</b></p>
-      {hud.landmark && (
-        <p className="row"><span>Landmark</span><b>{hud.landmark.name} · {nf.format(hud.landmark.distanceKm)} km</b></p>
+      {hud.target && (
+        <p className="row"><span>{hud.target.city}</span><b>{nf.format(hud.target.distanceKm)} km</b></p>
       )}
-      {hud.targets.map((x) => (
-        <p className="row" key={x.city}><span>{x.city}</span><b>{nf.format(x.distanceKm)} km</b></p>
-      ))}
-      <label>
-        Fly to
-        <select
-          defaultValue=""
-          onChange={(e) => {
-            if (e.target.value) engine.teleportToLandmark(e.target.value);
-            e.target.blur();
-            e.target.value = "";
-          }}
-        >
-          <option value="" disabled>a landmark…</option>
-          {[...engine.landmarkList]
-            .sort((a, b) => a.name.localeCompare(b.name))
-            .map((l) => (
-              <option key={l.id} value={l.id}>{l.name} ({l.country})</option>
-            ))}
-        </select>
-      </label>
+      <button
+        type="button"
+        onClick={(e) => {
+          engine.teleportToTarget();
+          e.currentTarget.blur();
+        }}
+      >
+        Fly near the destination
+      </button>
       <p className="hint">T / G: time of day faster / slower · R: restart here</p>
     </section>
   );

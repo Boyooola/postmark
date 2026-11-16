@@ -2,12 +2,12 @@ import { distanceKm, type LatLon } from "./geo";
 import type { City } from "./landmarks";
 
 /**
- * Delivery loop (Geographical Adventures style): a few destinations are open
- * at once; the player drops a parcel by parachute and it counts if it lands
+ * Delivery loop (Geographical Adventures style): one destination is open
+ * at a time; the player drops a parcel by parachute and it counts if it lands
  * close enough to a destination city.
  */
 export const DELIVERY = {
-  activeTargets: 3,
+  activeTargets: 1,
   /** a parcel landing within this distance of a destination is delivered */
   hitRadiusKm: 80,
   /** new destinations are picked this far from the player... */

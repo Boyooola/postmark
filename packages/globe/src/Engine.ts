@@ -12,7 +12,6 @@ import {
   Vector3,
   WebGLRenderer,
 } from "three";
-import { CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 import {
   Deliveries,
   FLIGHT,
@@ -21,17 +20,14 @@ import {
   bearingDeg,
   distanceKm,
   latLonToDirection,
-  nearest,
   type DropResult,
   type FlightTelemetry,
-  type Landmark,
   type LatLon,
 } from "@postmark/game-core";
 import { loadGeoAssets, type GeoAssets, type Progress } from "./assets";
 import { createAtmosphereUniforms } from "./atmosphereParams";
 import { WorldBend } from "./bend";
 import { Input, type ActionKey } from "./Input";
-import { Landmarks } from "./Landmarks";
 import { Trail, createPlaneModel, loadPlaneModel, type PlaneModel } from "./Plane";
 import { Sky } from "./Sky";
 import { Clouds } from "./Clouds";
@@ -49,24 +45,20 @@ export interface HudTarget {
   relativeDeg: number;
 }
 
-export interface NearestInfo {
-  name: string;
-  detail: string;
-  distanceKm: number;
-  relativeDeg: number;
-}
-
 export interface HudState {
   telemetry: FlightTelemetry;
-  targets: HudTarget[];
+  /** the open delivery (one at a time) */
+  target: HudTarget | null;
+  /** country or sea under the plane ("" if unknown) */
+  location: string;
   delivered: number;
   /** seconds since the run started */
   elapsedS: number;
-  /** developer overlay only */
-  landmark: NearestInfo | null;
   localTime: string;
   timeScale: number;
   fps: number;
+  /** adaptive render resolution, as a fraction of the screen's native resolution */
+  renderScale: number;
   chunks: number;
   streaming: boolean;
 }
@@ -99,7 +91,6 @@ export class Engine {
   readonly renderer: WebGLRenderer;
   readonly scene = new Scene();
   readonly camera: PerspectiveCamera;
-  private labels: CSS2DRenderer;
   private input: Input;
   private timer = new Timer();
   private raf = 0;
@@ -113,7 +104,6 @@ export class Engine {
   private sky!: Sky;
   private clouds!: Clouds;
   private cloudUniforms = createCloudUniforms();
-  private landmarks!: Landmarks;
   private flight!: FlightModel;
   private plane: PlaneModel = createPlaneModel();
   private trails = [new Trail(160, 0.0045 * PLANE_SCALE), new Trail(160, 0.0045 * PLANE_SCALE)];
@@ -135,12 +125,24 @@ export class Engine {
   private frames = 0;
   private fpsTimer = 0;
   private fps = 0;
+  // Adaptive resolution: drop the render scale when the frame rate sags, raise it
+  // again (slowly) when there is headroom.
+  private pixelRatio = 1;
+  private maxPixelRatio = 1;
+  private goodWindows = 0;
+  private resCooldown = 0;
+  private adaptive = true;
   private paused = false;
 
   private constructor(private opts: EngineOptions) {
     const { container } = opts;
-    this.renderer = new WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true, powerPreference: "high-performance" });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
+    // A normal depth buffer: the camera always sits a few km behind the plane, so a
+    // 0.25-unit near plane is precise enough, and unlike a logarithmic depth buffer it
+    // keeps the GPU's early depth test, so hidden terrain never runs the heavy shader.
+    this.renderer = new WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    this.maxPixelRatio = Math.min(window.devicePixelRatio, 1.5);
+    this.pixelRatio = this.maxPixelRatio;
+    this.renderer.setPixelRatio(this.pixelRatio);
     this.renderer.setSize(container.clientWidth, container.clientHeight);
     this.renderer.toneMapping = ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 0.95;
@@ -148,12 +150,8 @@ export class Engine {
     this.renderer.setClearColor(new Color(0x000000));
     container.appendChild(this.renderer.domElement);
 
-    this.labels = new CSS2DRenderer();
-    this.labels.setSize(container.clientWidth, container.clientHeight);
-    Object.assign(this.labels.domElement.style, { position: "absolute", inset: "0", pointerEvents: "none" });
-    container.appendChild(this.labels.domElement);
 
-    this.camera = new PerspectiveCamera(CAMERA.fov, container.clientWidth / container.clientHeight, 0.01, 20000);
+    this.camera = new PerspectiveCamera(CAMERA.fov, container.clientWidth / container.clientHeight, 0.25, 20000);
     this.plane.root.scale.setScalar(PLANE_SCALE);
 
     this.input = new Input();
@@ -179,7 +177,6 @@ export class Engine {
     if (this.assets.tiles) {
       this.detail = new DetailTerrain(opts.assetBase, this.assets.tiles, this.heights, this.assets.floatLinear, (w) => {
         if (w) this.terrain?.setDetailWindow(w);
-        this.landmarks?.reposition();
       });
     }
     if (this.assets.tilesFine) {
@@ -191,7 +188,6 @@ export class Engine {
         this.assets.floatLinear,
         (w) => {
           this.terrain?.setFineWindow(w);
-          this.landmarks?.reposition();
         },
         (lat, lon) => this.heights.sample(lat, lon, 1),
         (w) => (this.heights.fine = w),
@@ -215,14 +211,13 @@ export class Engine {
     this.sky = new Sky(atmo);
     this.clouds = new Clouds(atmo, this.cloudUniforms);
     this.clouds.mesh.visible = this.cloudUniforms.uCloudCover.value > 0;
-    this.landmarks = new Landmarks(this.assets.landmarks, surface);
     this.flight = new FlightModel(surface);
     this.deliveries = new Deliveries(this.assets.cities);
     this.balloons = new Balloons(surface);
     this.parcels = new Parcels(surface, (where) => this.onParcelLanded(where));
 
     this.scene.add(
-      this.terrain.mesh, this.sky.group, this.clouds.mesh, this.landmarks.group, this.balloons.group,
+      this.terrain.mesh, this.sky.group, this.clouds.mesh, this.balloons.group,
       this.parcels.group, this.plane.root, this.sunLight, this.sunLight.target, this.hemi,
     );
     for (const t of this.trails) this.scene.add(t.mesh);
@@ -267,10 +262,6 @@ export class Engine {
     return (this.detail?.loading ?? false) || (this.fine?.loading ?? false);
   }
 
-  get landmarkList(): Landmark[] {
-    return this.assets?.landmarks ?? [];
-  }
-
   // ------------------------------------------------------------------ actions
   spawn(lat: number, lon: number, headingDeg: number, altitudeM: number = FLIGHT.cruiseAltitudeM) {
     this.lastSpawn = { lat, lon, headingDeg, altitudeM, utcHours: this.utcHours };
@@ -280,11 +271,11 @@ export class Engine {
     this.fine?.update(lat, lon, true);
   }
 
-  /** Developer shortcut: fly towards a landmark from ~250 km south of it. */
-  teleportToLandmark(id: string) {
-    const lm = this.assets.landmarks.find((l) => l.id === id);
-    if (!lm) return;
-    this.spawn(Math.max(-89, lm.lat - 2.2), lm.lon, 0);
+  /** Developer shortcut: jump to ~250 km south of the open destination, facing it. */
+  teleportToTarget() {
+    const t = this.deliveries.targets[0];
+    if (!t) return;
+    this.spawn(Math.max(-89, t.lat - 2.2), t.lon, 0);
     this.snapCamera();
   }
 
@@ -366,11 +357,9 @@ export class Engine {
     this.terrain.update(this.camera);
     this.sky.update(this.camera.position, this.sun);
     this.clouds.update(this.camera.position);
-    this.landmarks.update(this.camera.position);
     this.balloons.update(this.camera.position, t);
     this.bendProps();
     this.renderer.render(this.scene, this.camera);
-    this.labels.render(this.scene, this.camera);
     this.unbendProps();
     this.tickHud(dt);
   };
@@ -380,7 +369,7 @@ export class Engine {
     this.bend.update(this.camera.position);
     if (this.bend.curvature <= 1) return;
     let i = 0;
-    for (const g of [this.landmarks.group, this.balloons.group, this.parcels.group]) {
+    for (const g of [this.balloons.group, this.parcels.group]) {
       for (const obj of g.children) {
         const s = (this.bendSaved[i] ??= { obj, pos: new Vector3(), quat: new Quaternion() });
         s.obj = obj;
@@ -469,6 +458,7 @@ export class Engine {
     this.fpsTimer += dt;
     if (this.fpsTimer >= 0.5) {
       this.fps = Math.round(this.frames / this.fpsTimer);
+      this.adaptResolution(this.fps, this.fpsTimer);
       this.frames = 0;
       this.fpsTimer = 0;
     }
@@ -477,31 +467,60 @@ export class Engine {
     this.hudTimer = 0;
     const tel = this.flight.telemetry();
     const rel = (b: number) => ((b - tel.headingDeg + 540) % 360) - 180;
-    const lm = nearest(tel, this.assets.landmarks);
     const local = (this.utcHours + tel.lon / 15 + 48) % 24;
     const hh = Math.floor(local), mm = Math.floor((local - hh) * 60);
     this.opts.onHud({
       telemetry: tel,
-      targets: this.deliveries.targets.map((t) => ({
-        city: t.city,
-        country: t.country,
-        distanceKm: distanceKm(tel, t),
-        relativeDeg: rel(bearingDeg(tel, t)),
-      })),
+      target: (() => {
+        const t = this.deliveries.targets[0];
+        return t ? { city: t.city, country: t.country, distanceKm: distanceKm(tel, t), relativeDeg: rel(bearingDeg(tel, t)) } : null;
+      })(),
+      location: this.assets.places.at(tel) ?? "",
       delivered: this.deliveries.delivered,
       elapsedS: this.runTime,
-      landmark: lm && {
-        name: lm.item.name,
-        detail: `${lm.item.city}, ${lm.item.country}`,
-        distanceKm: lm.distanceKm,
-        relativeDeg: rel(lm.bearingDeg),
-      },
       localTime: `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`,
       timeScale: this.timeScale,
       fps: this.fps,
+      renderScale: Math.round((this.pixelRatio / Math.max(1, window.devicePixelRatio)) * 100) / 100,
       chunks: this.terrain.chunksDrawn,
       streaming: this.streaming,
     });
+  }
+
+  /** Turn adaptive resolution off (full resolution) or back on, e.g. for screenshots. */
+  setAdaptiveResolution(on: boolean) {
+    this.adaptive = on;
+    if (!on && this.pixelRatio !== this.maxPixelRatio) {
+      this.pixelRatio = this.maxPixelRatio;
+      this.renderer.setPixelRatio(this.pixelRatio);
+      const c = this.opts.container;
+      this.renderer.setSize(c.clientWidth, c.clientHeight);
+    }
+  }
+
+  private adaptResolution(fps: number, window: number) {
+    if (!this.adaptive) return;
+    const MIN = 0.5;
+    this.resCooldown = Math.max(0, this.resCooldown - window);
+    let next = this.pixelRatio;
+    if (fps < 48 && this.pixelRatio > MIN) {
+      next = Math.max(MIN, this.pixelRatio * (fps < 30 ? 0.75 : 0.88));
+      this.goodWindows = 0;
+      this.resCooldown = 4;
+    } else if (fps >= 57 && this.pixelRatio < this.maxPixelRatio && this.resCooldown === 0) {
+      if (++this.goodWindows >= 6) {
+        next = Math.min(this.maxPixelRatio, this.pixelRatio * 1.08);
+        this.goodWindows = 0;
+      }
+    } else {
+      this.goodWindows = 0;
+    }
+    if (Math.abs(next - this.pixelRatio) > 0.01) {
+      this.pixelRatio = next;
+      this.renderer.setPixelRatio(next);
+      const c = this.opts.container;
+      this.renderer.setSize(c.clientWidth, c.clientHeight);
+    }
   }
 
   private onResize = () => {
@@ -509,7 +528,6 @@ export class Engine {
     this.camera.aspect = c.clientWidth / c.clientHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(c.clientWidth, c.clientHeight);
-    this.labels.setSize(c.clientWidth, c.clientHeight);
   };
 
   dispose() {
@@ -529,6 +547,5 @@ export class Engine {
     this.assets?.coastTexture.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
-    this.labels.domElement.remove();
   }
 }

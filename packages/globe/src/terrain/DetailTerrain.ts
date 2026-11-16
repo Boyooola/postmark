@@ -22,6 +22,8 @@ export interface TileManifest {
 
 const TILES_ACROSS = 8; // window = 8 x 8 tiles = 45 x 45 degrees at level 6
 const RECENTER_TILES = 1.75; // recentre when the plane is this far from the window centre
+/** fill missing tiles from a coarse grid, one lookup every FILL_STEP texels */
+const FILL_STEP = 4;
 const CACHE_LIMIT = 192; // decoded tiles kept in memory (~50 MB)
 
 /**
@@ -121,7 +123,7 @@ export class DetailTerrain {
       }
       await Promise.all(jobs);
       const win: DetailWindow = { data, size: n, lon0: -180 + tx0 * deg, lat0: 90 - ty0 * deg, spanDeg: TILES_ACROSS * deg };
-      // Swap in: GPU texture, CPU heights, then listeners (shader uniforms, landmarks).
+      // Swap in: GPU texture, CPU heights, then listeners (shader uniforms).
       if (this.floatLinear) {
         this.texture.image.data = data;
       } else {
@@ -163,12 +165,28 @@ export class DetailTerrain {
       out = new Float32Array(ts * ts);
       for (let k = 0, p = 0; k < out.length; k++, p += 4) out[k] = px[p] * 256 + px[p + 1] + px[p + 2] / 256 - 32768;
     } else {
-      // No tile was baked here: fill from the coarser data.
+      // No tile was baked here: fill from the coarser data. Sample a coarse grid
+      // (every FILL_STEP texels, about the coarser data's own resolution) and
+      // interpolate, instead of one lookup per texel; and let a frame render
+      // before each tile so entering a fine region doesn't freeze the game.
+      await new Promise((r) => setTimeout(r, 0));
       out = new Float32Array(ts * ts);
       const lonW = -180 + tx * deg, latN = 90 - ty * deg, step = deg / ts;
+      const g = Math.max(1, Math.min(FILL_STEP, ts));
+      const gn = Math.floor(ts / g) + 1;
+      const grid = new Float32Array(gn * gn);
+      for (let j = 0; j < gn; j++) {
+        const lat = latN - (Math.min(j * g, ts - 1) + 0.5) * step;
+        for (let i = 0; i < gn; i++) grid[j * gn + i] = this.fill(lat, lonW + (Math.min(i * g, ts - 1) + 0.5) * step);
+      }
       for (let y = 0; y < ts; y++) {
-        const lat = latN - (y + 0.5) * step;
-        for (let x = 0; x < ts; x++) out[y * ts + x] = this.fill(lat, lonW + (x + 0.5) * step);
+        const fy = y / g, j0 = Math.min(Math.floor(fy), gn - 2), wy = fy - j0;
+        for (let x = 0; x < ts; x++) {
+          const fx = x / g, i0 = Math.min(Math.floor(fx), gn - 2), wx = fx - i0;
+          const a = grid[j0 * gn + i0], b = grid[j0 * gn + i0 + 1];
+          const c = grid[(j0 + 1) * gn + i0], d = grid[(j0 + 1) * gn + i0 + 1];
+          out[y * ts + x] = (a + (b - a) * wx) * (1 - wy) + (c + (d - c) * wx) * wy;
+        }
       }
       return out; // not cached: the coarser data it came from may change
     }

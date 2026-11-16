@@ -2,8 +2,8 @@
 
 ```
 apps/web               Next.js 16 site: landing, /play (client-only canvas + React HUD)
-packages/game-core     Pure TypeScript game logic: scale, geo math, height sampling, flight, landmarks (unit-tested)
-packages/globe         three.js renderer: terrain LOD, atmosphere, plane, landmarks, camera, input
+packages/game-core     Pure TypeScript game logic: scale, geo math, height sampling, flight, deliveries, places (unit-tested)
+packages/globe         three.js renderer: terrain LOD, atmosphere, plane, balloons, parcels, curved horizon, camera, input
 tools/geo-pipeline     Python bake: raw public-domain data -> apps/web/public/geo/*
 docs/                  geodata, blender pipeline, milestones
 ```
@@ -11,7 +11,7 @@ docs/                  geodata, blender pipeline, milestones
 ## Principles
 
 - **Next.js is the website around the game, not the game.** `/play` loads the engine with `dynamic(..., { ssr: false })`. The frame loop never touches React state; the engine pushes a HUD snapshot to a Zustand store about 10 times a second, and one-off game events (delivered, missed) through `onEvent`.
-- **UI follows Geographical Adventures:** no panels in flight. Destinations on top, boost dial and timer bottom left, compass bottom right. Developer readouts live behind the backtick key.
+- **UI follows Geographical Adventures:** no panels or cards in flight, just text with a soft shadow. Where you are (country or sea) at the top; one arrow at the bottom pointing to the open delivery, with its name and distance; boost dial and timer bottom left; compass bottom right. Developer readouts live behind the backtick key.
 - **Game logic doesn't depend on rendering.** `game-core` has no DOM or WebGL code and runs in Node for tests. It uses three.js only for vector maths.
 - **Real metres everywhere** except the final vertical exaggeration at render time (see geodata.md).
 - **Data is baked, not computed at runtime.** Anything that can be precomputed (masks, lake levels, peak heights, city elevations) is done in the pipeline.
@@ -30,12 +30,19 @@ docs/                  geodata, blender pipeline, milestones
 | Shadows | `terrainShadow()` in `terrainShader.ts` | Per-pixel march towards the sun through `heightAt()` (24 geometric steps), soft penumbra; long evening shadows of real ranges |
 | Atmosphere | `shaders/chunks.ts`, `Sky.ts`, `atmosphereParams.ts` | Rayleigh + Mie single scattering, 8 view samples, 4 sun samples; shared by sky and terrain (aerial perspective) |
 | Plane | `Plane.ts` | Loads the Blender glTF (`/models/aircraft/mailplane.glb`), placeholder fallback, ribbon trails |
-| Landmarks | `Landmarks.ts` | Placeholders by kind, optional glTF, beams, CSS2D labels near the camera |
+| Where am I | game-core `places.ts`, `places.png` | Country or sea under the plane, for the top of the HUD |
 | Input | `Input.ts` | Keyboard and gamepad, eased; Space/A drops a parcel |
 | Deliveries | game-core `deliveries.ts`, globe `Balloons.ts`, `Parcels.ts` | Destinations, balloons over them, parachute parcels; landing point decides the delivery |
 
-Renderer choice: WebGL 2 + GLSL for the prototype, with a logarithmic depth buffer (near 0.004, far 20,000
-units). The WebGPU/TSL port is planned for the M3 performance pass.
+Renderer choice: WebGL 2 + GLSL for the prototype, with a normal depth buffer (near 0.25, far 20,000 units).
+A logarithmic depth buffer would write depth per fragment and disable the GPU's early depth test, so terrain
+hidden behind mountains would still run the full terrain shader.
+
+Performance budget: atmosphere (sunlight, in-scatter, transmittance) is computed per vertex; the fragment
+shader does 5 height taps, a 16-step shadow march, and relief noise only where it is visible. Render
+resolution adapts to the frame rate (50–150% of CSS pixels, `adaptResolution()` in `Engine.ts`; the
+backtick overlay shows fps and the current scale). Fine-terrain gaps are filled from a coarse grid and
+spread over frames so streaming doesn't stall the main thread. The WebGPU/TSL port is planned for the M3 performance pass.
 
 ## Coordinate conventions
 

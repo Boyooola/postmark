@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  Places,
   FLIGHT,
   FlightModel,
   HeightField,
@@ -70,11 +71,24 @@ describe("HeightField", () => {
 describe("FlightModel", () => {
   const flat = () => 0;
 
-  it("spawns at the requested height above ground", () => {
+  it("spawns at the requested altitude, clamped to the altitude band", () => {
     const f = new FlightModel(() => 1000);
-    f.spawn(10, 20, 90, 1500);
-    expect(f.telemetry().aglM).toBeCloseTo(1500, 0);
+    f.spawn(10, 20, 90, 15000);
+    expect(f.telemetry().altitudeM).toBeCloseTo(15000, 0);
     expect(f.telemetry().headingDeg).toBeCloseTo(90, 3);
+    f.spawn(10, 20, 90, 1500);
+    expect(f.telemetry().altitudeM).toBeCloseTo(FLIGHT.floorM, 0);
+    f.spawn(10, 20, 90, 90000);
+    expect(f.telemetry().altitudeM).toBeCloseTo(FLIGHT.ceilingM, 0);
+  });
+
+  it("stays inside the altitude band however hard you dive or climb", () => {
+    const f = new FlightModel(() => 0);
+    f.spawn(0, 0, 0);
+    for (let i = 0; i < 1200; i++) f.update(1 / 60, { pitch: -1, turn: 0, boost: true, slow: false });
+    expect(f.telemetry().altitudeM).toBeGreaterThan(FLIGHT.floorM - 1);
+    for (let i = 0; i < 2400; i++) f.update(1 / 60, { pitch: 1, turn: 0, boost: true, slow: false });
+    expect(f.telemetry().altitudeM).toBeLessThan(FLIGHT.ceilingM + 1);
   });
 
   it("flies level along the sphere at cruise speed", () => {
@@ -89,11 +103,11 @@ describe("FlightModel", () => {
     expect(t.airspeedKmh).toBeCloseTo(FLIGHT.cruiseSpeed * FLIGHT.displayKmhPerUnit);
   });
 
-  it("never goes below the terrain", () => {
-    const f = new FlightModel(() => 3000);
+  it("keeps its clearance over high mountains", () => {
+    const f = new FlightModel(() => 9500);
     f.spawn(0, 0, 0, 200);
     for (let i = 0; i < 600; i++) f.update(1 / 60, { pitch: -1, turn: 0, boost: false, slow: false });
-    expect(f.telemetry().aglM).toBeGreaterThan(0);
+    expect(f.telemetry().aglM).toBeGreaterThan(FLIGHT.clearanceM - 1);
   });
 
   it("turns right with positive turn input", () => {
@@ -171,7 +185,7 @@ describe("Deliveries", () => {
     city("Tinyville", "Nowhere", 10, 10, 2000), // too small to be a destination
   ];
 
-  it("opens three well-separated destinations away from the player", () => {
+  it("opens destinations away from the player", () => {
     const d = new Deliveries(cities, mulberry32(1));
     expect(d.poolSize).toBe(5);
     d.start({ lat: 48.86, lon: 2.35 }); // from Paris
@@ -211,5 +225,29 @@ describe("TerrainHeights fine window", () => {
     expect(t.sample(10, 10, 1)).toBeCloseTo(500); // fine excluded
     expect(t.sample(18, 2)).toBeCloseTo(500); // detail only
     expect(t.sample(-30, -60)).toBeCloseTo(100); // base only
+  });
+});
+
+describe("Places", () => {
+  // 4 x 2 map: west half = country 1 ("Westland"), east-north = sea 1 ("North Sea"), east-south = nothing.
+  const rgba = new Uint8Array(4 * 2 * 4);
+  const put = (x: number, y: number, c: number, s: number) => {
+    const v = (c << 9) | s;
+    rgba.set([v >> 16, (v >> 8) & 255, v & 255, 255], (y * 4 + x) * 4);
+  };
+  put(0, 0, 1, 0); put(1, 0, 1, 1); put(0, 1, 1, 0); put(1, 1, 1, 0);
+  put(2, 0, 0, 1); put(3, 0, 0, 1);
+  const p = new Places({ width: 4, height: 2, rgba, countries: ["Westland"], seas: ["North Sea"] });
+
+  it("prefers the country, then the sea", () => {
+    expect(p.at({ lat: 45, lon: -100 })).toBe("Westland");
+    expect(p.at({ lat: 45, lon: -10 })).toBe("Westland"); // both: country wins
+    expect(p.at({ lat: 45, lon: 100 })).toBe("North Sea");
+    expect(p.at({ lat: -45, lon: 100 })).toBeNull();
+  });
+
+  it("wraps longitude and clamps the poles", () => {
+    expect(p.at({ lat: 90, lon: 460 })).toBe("North Sea"); // 460 = 100 E
+    expect(p.at({ lat: -90, lon: -180 })).toBe("Westland");
   });
 });

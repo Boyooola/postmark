@@ -7,8 +7,8 @@ export default function Home() {
         <p className="eyebrow">Prototype · Milestone 1</p>
         <h1>Postmark</h1>
         <p className="lede">
-          Fly a little mail plane over a real Earth: real mountains, coastlines, lakes and rivers, and the
-          world&apos;s landmarks rising out of the globe.
+          Fly a little mail plane over a real Earth: real mountains, coastlines, lakes and rivers. Find the
+          balloon over each city and drop its parcel.
         </p>
         <Link className="play" href="/play">
           Take off
