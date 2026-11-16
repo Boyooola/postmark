@@ -40,7 +40,7 @@ void main() {
   vec3 T;
   vec3 col = scatter(uCamPos, rd, 1e9, T);
   // Sun disc, dimmed and reddened by the air in front of it.
-  vec2 tp = raySphere(uCamPos, rd, uRadius);
+  vec2 tp = raySphere(uCamPos - uPlanetC, rd, uPlanetR);
   if (tp.x < 0.0 || tp.x > 1e8) {
     float d = dot(rd, uSunDir);
     col += T * (smoothstep(0.99985, 0.99995, d) * 40.0 + pow(max(d, 0.0), 2000.0) * 2.0);

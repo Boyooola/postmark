@@ -26,6 +26,8 @@ docs/                  geodata, blender pipeline, milestones
 | Terrain streaming | `terrain/DetailTerrain.ts` + game-core `terrainHeights.ts` | Two windows around the plane: level 6 (45°, ~2.4 km) everywhere and level 8 (11.25°, ~610 m) in fine regions; `heightAt()` in GLSL and `TerrainHeights.sample()` on the CPU blend base → detail → fine identically |
 | Models | `models.ts` | Shared glTF template cache, cloning with per-instance materials (balloon colours) |
 | Clouds | `Clouds.ts`, `cloudParams.ts`, `cloudChunk` | Procedural layer at 3,200 m; the same density function shades clouds and casts shadows on terrain |
+| Curved horizon | `bend.ts` (`WorldBend` + `bendChunk`) | Render-only: the world is drawn on a sphere of radius R / curvature (default 5) touching the real one under the camera; ground distance and height are kept, so nearby terrain is unchanged. Terrain bends in its vertex shader, props are bent just before drawing and restored after, and the sky occludes against the drawn sphere (`uPlanetC`, `uPlanetR`). Physics, collisions and the HUD never see bent positions |
+| Shadows | `terrainShadow()` in `terrainShader.ts` | Per-pixel march towards the sun through `heightAt()` (24 geometric steps), soft penumbra; long evening shadows of real ranges |
 | Atmosphere | `shaders/chunks.ts`, `Sky.ts`, `atmosphereParams.ts` | Rayleigh + Mie single scattering, 8 view samples, 4 sun samples; shared by sky and terrain (aerial perspective) |
 | Plane | `Plane.ts` | Loads the Blender glTF (`/models/aircraft/mailplane.glb`), placeholder fallback, ribbon trails |
 | Landmarks | `Landmarks.ts` | Placeholders by kind, optional glTF, beams, CSS2D labels near the camera |
@@ -40,6 +42,7 @@ units). The WebGPU/TSL port is planned for the M3 performance pass.
 - World: planet centre at the origin, **+Y = north pole**, lat 0 / lon 0 on **+Z**, lon +90° on **+X**.
 - Textures: `u = (lon + 180) / 360`, `v = (90 − lat) / 180` (v = 0 at the top), `flipY = false`.
 - Plane model space: forward −Z, up +Y, right +X.
+- Everything in world space is the real sphere. Only drawing goes through the curved-horizon bend (`bend.ts`); never feed bent positions back into game logic.
 
 ## Verification
 

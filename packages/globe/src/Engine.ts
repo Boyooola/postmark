@@ -3,7 +3,9 @@ import {
   Color,
   DirectionalLight,
   HemisphereLight,
+  Object3D,
   PerspectiveCamera,
+  Quaternion,
   Scene,
   SRGBColorSpace,
   Timer,
@@ -27,6 +29,7 @@ import {
 } from "@postmark/game-core";
 import { loadGeoAssets, type GeoAssets, type Progress } from "./assets";
 import { createAtmosphereUniforms } from "./atmosphereParams";
+import { WorldBend } from "./bend";
 import { Input, type ActionKey } from "./Input";
 import { Landmarks } from "./Landmarks";
 import { Trail, createPlaneModel, loadPlaneModel, type PlaneModel } from "./Plane";
@@ -86,7 +89,7 @@ export interface EngineOptions {
 }
 
 /** Chase camera, Geographical Adventures style: high and behind, so the curve of the Earth shows. */
-const CAMERA = { back: 2.7, up: 1.15, lookAhead: 3.2, lookUp: 0.15, fov: 62, boostFov: 74 };
+const CAMERA = { back: 3.0, up: 2.3, lookAhead: 2.6, lookUp: -1.2, fov: 62, boostFov: 74 };
 const PLANE_SCALE = 2.5;
 
 const DEFAULT_START = { lat: 47.2, lon: 6.6, headingDeg: 140, altitudeM: FLIGHT.cruiseAltitudeM, utcHours: 14.6 };
@@ -119,6 +122,9 @@ export class Engine {
   private parcels!: Parcels;
   private runTime = 0;
   private sun = new Vector3();
+  /** Render-only curved horizon (bend.ts). */
+  readonly bend = new WorldBend();
+  private bendSaved: { obj: Object3D; pos: Vector3; quat: Quaternion }[] = [];
   private sunLight = new DirectionalLight(0xffffff, 3);
   private hemi = new HemisphereLight(0xbfd8ff, 0x3a3020, 0.6);
 
@@ -166,7 +172,7 @@ export class Engine {
     const { opts } = this;
     this.assets = await loadGeoAssets(opts.assetBase, this.renderer, opts.onProgress);
     if (this.disposed) return;
-    const atmo = createAtmosphereUniforms(this.sun);
+    const atmo = createAtmosphereUniforms(this.sun, this.bend);
     this.heights = new TerrainHeights(this.assets.heights);
     const surface = (lat: number, lon: number) => this.heights.surface(lat, lon);
 
@@ -200,6 +206,7 @@ export class Engine {
         fine: this.fine?.texture ?? this.assets.heightTexture,
         surface: this.assets.surfaceTexture,
         aux: this.assets.auxTexture,
+        color: this.assets.colorTexture,
         coast: this.assets.coastTexture,
       },
       atmo,
@@ -361,10 +368,42 @@ export class Engine {
     this.clouds.update(this.camera.position);
     this.landmarks.update(this.camera.position);
     this.balloons.update(this.camera.position, t);
+    this.bendProps();
     this.renderer.render(this.scene, this.camera);
     this.labels.render(this.scene, this.camera);
+    this.unbendProps();
     this.tickHud(dt);
   };
+
+  /** Move props onto the curved (drawn) world for this frame; real poses are restored after drawing. */
+  private bendProps() {
+    this.bend.update(this.camera.position);
+    if (this.bend.curvature <= 1) return;
+    let i = 0;
+    for (const g of [this.landmarks.group, this.balloons.group, this.parcels.group]) {
+      for (const obj of g.children) {
+        const s = (this.bendSaved[i] ??= { obj, pos: new Vector3(), quat: new Quaternion() });
+        s.obj = obj;
+        s.pos.copy(obj.position);
+        s.quat.copy(obj.quaternion);
+        this.bend.place(obj, s.pos, s.quat);
+        i++;
+      }
+    }
+    this.bendSaved.length = i;
+  }
+
+  private unbendProps() {
+    for (const s of this.bendSaved) {
+      s.obj.position.copy(s.pos);
+      s.obj.quaternion.copy(s.quat);
+    }
+  }
+
+  /** Curved-horizon strength: 1 = real Earth, higher = smaller-looking planet. */
+  setCurvature(c: number) {
+    this.bend.curvature = Math.max(1, c);
+  }
 
   private updateSun() {
     const subsolarLon = (12 - this.utcHours) * 15;

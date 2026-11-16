@@ -1,5 +1,6 @@
 import { Vector3 } from "three";
 import { WORLD_RADIUS } from "@postmark/game-core";
+import type { WorldBend } from "./bend";
 
 /**
  * Atmosphere tuning, in world units (1 u = 6.371 km). The real atmosphere's
@@ -8,8 +9,10 @@ import { WORLD_RADIUS } from "@postmark/game-core";
  * The scattering coefficients are scaled down to keep roughly Earth's total
  * optical depth (and so the same blue).
  */
-export function createAtmosphereUniforms(sunDir: Vector3) {
+export function createAtmosphereUniforms(sunDir: Vector3, bend: WorldBend) {
   return {
+    // Curved-horizon uniforms are shared by every shader that sees the planet.
+    ...bend.uniforms,
     uSunDir: { value: sunDir },
     uRadius: { value: WORLD_RADIUS },
     uAtmoRadius: { value: WORLD_RADIUS + 60 },

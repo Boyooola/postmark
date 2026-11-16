@@ -18,6 +18,7 @@ versus stylized.
 | Deserts | Natural Earth 1:10m `geography_regions_polys` (Desert, Erg) | vector | Public domain |
 | City lights | Natural Earth 1:10m `urban_areas` + `populated_places_simple` | vector + points | Public domain |
 | Cities | Natural Earth 1:10m `populated_places_simple` (top 2,000) | points | Public domain |
+| Land colour | **NASA Blue Marble: Next Generation**, base map without topography shading, one month (June preferred), 8 tiles `world.YYYYMM.3x21600x21600.{A-D}{1,2}.jpg` | 86400 × 43200, 500 m (baked to 8192 × 4096) | Public domain; credit NASA Earth Observatory |
 | Landmarks | Curated by hand: `tools/geo-pipeline/landmarks.source.json` | points | Ours |
 
 The ETOPO 2022 GeoTIFF (466 MB, SHA-256 `9d27d4b8…a7fd08e`) and the GEBCO_2026 grid (4.2 GB zip, from
@@ -25,7 +26,10 @@ gebco.net, "ice surface elevation", Data GeoTiff) can't be fetched by the build 
 downloaded manually. Without ETOPO 2022 the bake falls back to the 10′ grid; without GEBCO there are simply
 no fine tiles.
 
-Credit: *GEBCO Compilation Group (2026) GEBCO 2026 Grid.*
+Credit: *GEBCO Compilation Group (2026) GEBCO 2026 Grid.* · *Blue Marble: Next Generation, NASA Earth Observatory (Reto Stöckli).*
+
+The Blue Marble tiles also have to be downloaded by hand: the "Base Map" page of NASA Earth Observatory's
+Blue Marble Next Generation collection, one month, the eight full-resolution tiles.
 
 ## Baked outputs (`apps/web/public/geo/`)
 
@@ -39,8 +43,9 @@ All rasters are **equirectangular**: x = longitude −180° → +180°, y = lati
 | `tiles/8/X_Y.webp` | 994 tiles of 256 × 256, 46 MB total | Fine elevation (~610 m/px) from GEBCO for 10 regions: Himalaya & Karakoram, Alps, Rockies/Grand Canyon/Sierra, central Andes, Norway, Japan, New Zealand, Philippines, Kilimanjaro, Iceland |
 | `tiles-8.json` | | Fine tile manifest, incl. the region list |
 | `surface.png` | 8192 × 4096 RGBA | Anti-aliased masks: R land, G lake, B river, A ice |
-| `coast.png` | 8192 × 4096 L | Signed distance to the sea coast: `km = (v − 128) × 0.5`, positive at sea (±64 km). Drives surf lines, shallows and beaches. |
-| `extras.png` | 4096 × 2048 RGB | R city lights, G desert, B reserved |
+| `coast.png` | 8192 × 4096 RGB | Signed distances, `km = (v − 128) × 0.5` (±64 km): R to the sea coast (positive at sea), G to a lake shore (positive on the lake). Draws smooth coastlines and drives surf lines, shallows and beaches. |
+| `color.webp` | 8192 × 4096 sRGB | Satellite true colour (Blue Marble), graded in the terrain shader (`uSatGrade`: brightness, saturation, contrast) |
+| `extras.png` | 4096 × 2048 RGB | R city lights, G desert, B reserved (named "extras", not "aux": `aux` is a reserved file name on Windows) |
 | `cities.json` | 2,000 entries | name, country, lat/lon, population, capital flag, elevation |
 | `landmarks.json` | 43 entries | landmark data plus ground elevation sampled from the DEM |
 | `meta.json` | | sizes, encodings, sources, bake statistics |
@@ -106,9 +111,11 @@ matches what you see) use the exaggerated heights.
 
 | Real data | Stylized |
 | --- | --- |
-| Continents, coastlines, islands, lakes, rivers, ice | Land colours (from latitude, elevation, slope, deserts) |
+| Continents, coastlines, islands, lakes, rivers, ice | Colour grading of the satellite image (darker, muted); bare rock on steep faces |
+| Land colour from satellite imagery (~4.9 km) | |
 | Terrain at ~2.4 km near the plane, ~9.8 km elsewhere | Relief detail below ~2 km: domain-warped ridged noise ("erosion"), shading only, strongest on mountains, faded per octave so it never shimmers |
-| Ocean depth and colour by depth; coastline distance | Waves, sun glitter and surf bands (animated, procedural) |
+| Ocean depth and colour by depth; coast and lake-shore distance | Waves, sun glitter and surf lines on coasts and lakes (animated, procedural) |
+| Terrain shadows (ray-marched through the real heights) | Curved horizon: drawn as a planet 1/5 of Earth's radius (render only) |
 | | Night-light points when flying low |
 | Summit heights of listed peaks | Snowline (latitude-based curve) |
 | Positions of cities and landmarks | Clouds (procedural, off by default) |
@@ -128,6 +135,8 @@ pip install -r tools/geo-pipeline/requirements.txt
 pnpm geo:fetch    # Natural Earth + fallback DEM into tools/geo-pipeline/raw (gitignored)
 # put ETOPO_2022_v1_60s_N90W180_surface.tif in tools/geo-pipeline/raw/ as well
 pnpm geo:bake     # writes apps/web/public/geo/* (about 2.5 minutes, ~3 GB RAM)
+# satellite colour: put the 8 Blue Marble tiles in a folder, then
+python3 tools/geo-pipeline/bake_color.py --bmng <that folder>     # ~1 minute; also refreshes coast.png
 # fine tiles: unzip the GEBCO_2026 GeoTIFFs into a folder, then
 python3 tools/geo-pipeline/bake_detail.py --gebco <that folder>   # ~1.5 minutes, reads with memory maps
 ```

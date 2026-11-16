@@ -17,9 +17,9 @@ Outputs (written to apps/web/public/geo/):
   tiles.json     tile manifest
   surface.png    8192x4096 RGBA, anti-aliased coverage masks (0..255)
                  R = land, G = lake, B = river, A = ice (glaciers + ice shelves)
-  coast.png      8192x4096 L, signed distance to the sea coast:
-                 value = 128 + km / 0.5 (clamped), > 128 at sea, < 128 on land.
-                 Drives surf lines, shallow-water tint and beaches.
+  coast.png      8192x4096 RGB, signed distances, value = 128 + km / 0.5 (clamped):
+                 R = to the sea coast (> 128 at sea), G = to a lake shore (> 128 on
+                 the lake). Drives coastlines, surf lines, shallow-water tint, beaches.
   extras.png     4096x2048 RGB (not "aux": a reserved file name on Windows)
                  R = city lights (night side), G = desert, B = reserved (0)
   cities.json    ~2,000 populated places with real elevation sampled from the DEM
@@ -323,6 +323,27 @@ def decode_terrarium(rgb: np.ndarray) -> np.ndarray:
 
 
 # ------------------------------------------------------------------------- main
+def signed_km(inside_cov: np.ndarray) -> np.ndarray:
+    """Signed distance in km to the edge of a coverage mask (> 0 inside), at 8192 wide.
+
+    The anti-aliased coverage gives a sub-pixel correction so contours stay smooth.
+    """
+    inside = inside_cov >= 0.5
+    km_per_px = 40075.0 / inside_cov.shape[1]
+    d = ndimage.distance_transform_edt(inside).astype(np.float32)
+    d -= ndimage.distance_transform_edt(~inside).astype(np.float32)
+    return (d + (inside_cov - 0.5)) * km_per_px
+
+
+def save_shore_fields(land8: np.ndarray, lakes8: np.ndarray, path: Path) -> None:
+    """coast.png: R = signed km to the sea coast (> 0 at sea), G = signed km to a lake
+    shore (> 0 on the lake). Both decode as km = (v - 128) * 0.5."""
+    enc = lambda km: np.clip(128.0 + km / 0.5, 0, 255).round().astype(np.uint8)
+    sea = enc(signed_km(1.0 - land8))
+    lake = enc(signed_km(lakes8))
+    Image.fromarray(np.stack([sea, lake, np.zeros_like(sea)], axis=-1), "RGB").save(path, optimize=True)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--raw", type=Path, default=ROOT / "tools" / "geo-pipeline" / "raw")
@@ -363,18 +384,11 @@ def main() -> None:
     Image.fromarray((surface * 255).round().astype(np.uint8), "RGBA").save(OUT / "surface.png", optimize=True)
     del rivers_w, ice_w, surface
 
-    print("2b   coast distance field")
-    # At the display resolution (8192 wide) to keep memory sane; the anti-aliased
-    # land coverage gives a sub-pixel correction so contours stay smooth.
+    print("2b   coast and lake-shore distance fields")
     land8 = downsample(land_w, SURF_W, SURF_H)
-    sea = land8 < 0.5
-    km_per_px = 40075.0 / SURF_W
-    signed = ndimage.distance_transform_edt(sea).astype(np.float32)
-    signed -= ndimage.distance_transform_edt(~sea).astype(np.float32)
-    signed = (signed + (0.5 - land8)) * km_per_px
-    coast = np.clip(128.0 + signed / 0.5, 0, 255).round().astype(np.uint8)
-    Image.fromarray(coast, "L").save(OUT / "coast.png", optimize=True)
-    del signed, coast, sea, land8
+    lakes8 = downsample(lakes_w, SURF_W, SURF_H)
+    save_shore_fields(land8, lakes8, OUT / "coast.png")
+    del land8, lakes8
 
     print("3/8 height consistency at the working grid (coastlines, lakes, peaks)")
     is_land = land_w >= 0.5
@@ -495,7 +509,7 @@ def main() -> None:
                     "minM": round(float(E.min())), "maxM": round(float(E.max())), "sourceResolutionKm": round(dem_res_km, 2),
                     "tiles": len(written)},
         "surface": {"file": "surface.png", "width": SURF_W, "height": SURF_H, "channels": {"r": "land", "g": "lake", "b": "river", "a": "ice"}},
-        "coast": {"file": "coast.png", "width": SURF_W, "height": SURF_H, "decode": "km = (v - 128) * 0.5; > 0 at sea"},
+        "coast": {"file": "coast.png", "width": SURF_W, "height": SURF_H, "decode": "km = (v - 128) * 0.5; R > 0 at sea, G > 0 on lakes"},
         "aux": {"file": "extras.png", "width": AUX_W, "height": AUX_H, "channels": {"r": "cityLights", "g": "desert", "b": "reserved"}},
         "stats": {"lakes": n_lakes, "peakSigmaKm": round(sigma_km, 1), "cities": len(cities), "landmarks": len(landmarks), "peaks": peak_report},
         "sources": [

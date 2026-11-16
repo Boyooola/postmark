@@ -56,6 +56,9 @@ uniform float uScaleHeight;
 uniform vec3 uBetaR;
 uniform float uBetaM;
 uniform float uSunIntensity;
+// The planet as drawn (smaller sphere when the curved horizon is on; see bend.ts).
+uniform vec3 uPlanetC;
+uniform float uPlanetR;
 
 vec2 raySphere(vec3 ro, vec3 rd, float r) {
   float b = dot(ro, rd);
@@ -97,7 +100,7 @@ vec3 scatter(vec3 ro, vec3 rd, float maxT, out vec3 transmittance) {
   vec2 ta = raySphere(ro, rd, uAtmoRadius);
   float t0 = max(ta.x, 0.0);
   float t1 = min(ta.y, maxT);
-  vec2 tp = raySphere(ro, rd, uRadius * 0.9995);
+  vec2 tp = raySphere(ro - uPlanetC, rd, uPlanetR * 0.9995);
   if (tp.x > 0.0) t1 = min(t1, tp.x);
   if (t1 <= t0) return vec3(0.0);
   const int N = 8;

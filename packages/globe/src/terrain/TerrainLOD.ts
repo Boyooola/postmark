@@ -39,6 +39,7 @@ export interface TerrainTextures {
   fine: Texture;
   surface: Texture;
   aux: Texture;
+  color: Texture;
   coast: Texture;
 }
 
@@ -123,10 +124,14 @@ export class TerrainLOD {
         uHeight: { value: tex.height },
         uSurface: { value: tex.surface },
         uAux: { value: tex.aux },
+        uColor: { value: tex.color },
+        uSatGrade: { value: new Vector3(0.62, 0.8, 1.08) }, // brightness, saturation, contrast
         uCoast: { value: tex.coast },
         uTime: { value: 0 },
         uPixelAngle: { value: 0.0015 },
         uRelief: { value: 1 },
+        uAmbient: { value: 0.3 },
+        uShadowSoft: { value: 0.05 },
         uDetail: { value: tex.detail },
         uDetailRect: { value: new Vector4(0, 0, 1, 0) },
         uFine: { value: tex.fine },
