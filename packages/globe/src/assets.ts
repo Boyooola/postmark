@@ -108,7 +108,7 @@ export async function loadGeoAssets(base: string, renderer: WebGLRenderer, progr
   progress("Loading coastlines, lakes and rivers", 0.6);
   const [surfaceBmp, auxBmp, coastBmp] = await Promise.all([
     fetchBitmap(`${base}/surface.png`, Math.min(maxTex, 8192)),
-    fetchBitmap(`${base}/aux.png`, Math.min(maxTex, 4096)),
+    fetchBitmap(`${base}/extras.png`, Math.min(maxTex, 4096)),
     fetchBitmap(`${base}/coast.png`, Math.min(maxTex, 8192)),
   ]);
   progress("Preparing the world", 0.9);

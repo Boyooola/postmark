@@ -19,6 +19,11 @@ pnpm install
 pnpm dev          # http://localhost:3000, then click "Take off"
 ```
 
+If the page sits on "Warming up the engine…", the browser isn't getting the game's scripts. The dev
+server only serves them to loopback (`localhost`, `127.0.0.1`) and private-network addresses; for any
+other host name, start it with `POSTMARK_DEV_ORIGINS=my-host pnpm dev`. Also make sure you are on the
+latest branch and have run `pnpm install` after pulling.
+
 Fly to the destinations shown at the top (the arrows point the way), find the hot-air balloon over the
 city, and drop a parcel by parachute close to it.
 

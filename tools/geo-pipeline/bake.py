@@ -20,7 +20,7 @@ Outputs (written to apps/web/public/geo/):
   coast.png      8192x4096 L, signed distance to the sea coast:
                  value = 128 + km / 0.5 (clamped), > 128 at sea, < 128 on land.
                  Drives surf lines, shallow-water tint and beaches.
-  aux.png        4096x2048 RGB
+  extras.png     4096x2048 RGB (not "aux": a reserved file name on Windows)
                  R = city lights (night side), G = desert, B = reserved (0)
   cities.json    ~2,000 populated places with real elevation sampled from the DEM
   landmarks.json curated landmarks with real coordinates and elevations
@@ -455,7 +455,7 @@ def main() -> None:
     desert = ndimage.gaussian_filter(desert, 3.0)
     desert = np.asarray(Image.fromarray((desert * 255).astype(np.uint8)).resize((AUX_W, AUX_H), Image.BILINEAR), np.float32) / 255.0
     aux = np.stack([lights_f, desert, np.zeros_like(desert)], axis=-1)
-    Image.fromarray((aux * 255).round().astype(np.uint8), "RGB").save(OUT / "aux.png", optimize=True)
+    Image.fromarray((aux * 255).round().astype(np.uint8), "RGB").save(OUT / "extras.png", optimize=True)
 
     print("7/8 cities + landmarks")
     cities = []
@@ -496,7 +496,7 @@ def main() -> None:
                     "tiles": len(written)},
         "surface": {"file": "surface.png", "width": SURF_W, "height": SURF_H, "channels": {"r": "land", "g": "lake", "b": "river", "a": "ice"}},
         "coast": {"file": "coast.png", "width": SURF_W, "height": SURF_H, "decode": "km = (v - 128) * 0.5; > 0 at sea"},
-        "aux": {"file": "aux.png", "width": AUX_W, "height": AUX_H, "channels": {"r": "cityLights", "g": "desert", "b": "reserved"}},
+        "aux": {"file": "extras.png", "width": AUX_W, "height": AUX_H, "channels": {"r": "cityLights", "g": "desert", "b": "reserved"}},
         "stats": {"lakes": n_lakes, "peakSigmaKm": round(sigma_km, 1), "cities": len(cities), "landmarks": len(landmarks), "peaks": peak_report},
         "sources": [
             {"name": dem_name, "by": "NOAA NCEI", "licence": "Public domain (US Government)"},
